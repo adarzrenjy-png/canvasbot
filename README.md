@@ -120,17 +120,31 @@ signing matters: Apple silicon refuses to launch unsigned arm64 code at all, and
 electron-builder does not fall back to ad-hoc on its own, so the build script
 sets the identity explicitly.
 
-An ad-hoc signed build still trips Gatekeeper, because it is not notarized. The
-first launch takes a detour:
+An ad-hoc signed build still trips Gatekeeper, because it is not notarized.
+macOS reports this as *“Cadence” Not Opened — Apple could not verify “Cadence” is
+free of malware*, offering only **Move to Trash** and **Done**. That wording is
+about the missing notarization ticket, not about anything found in the app.
+Choose **Done**, never *Move to Trash*, then allow it one of two ways.
 
-- **macOS 14 Sonoma and earlier** — right-click the app, choose **Open**, then
-  **Open** again in the dialog.
-- **macOS 15 Sequoia and later** — the right-click shortcut no longer works. Try
-  to open the app, dismiss the warning, then go to **System Settings → Privacy &
-  Security**, scroll to the message about Cadence, and click **Open Anyway**.
+**Terminal — one command.** Remove the quarantine flag macOS attaches to
+downloaded files:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Cadence.app
+```
+
+`-r` matters: an app is a directory, and the flag sits on files inside it. After
+this the app opens normally, for good.
+
+**System Settings — no Terminal.** Try to open Cadence, dismiss the warning, then
+go to **System Settings → Privacy & Security** and scroll to the bottom. A line
+about Cadence being blocked appears with an **Open Anyway** button; the button
+only shows up after a launch attempt, and only for about an hour afterwards. On
+**macOS 14 and earlier** you can instead right-click the app and choose **Open**;
+that shortcut was removed in macOS 15.
 
 Only a **signed and notarized** build launches on a plain double-click with no
-warning. That needs a paid Apple Developer account.
+warning at all. That needs a paid Apple Developer account.
 
 To produce a distributable build, export your own credentials before building —
 they are read from the environment and never stored in this repository:
