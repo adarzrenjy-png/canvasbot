@@ -38,11 +38,10 @@ type ProviderModel = { id: string; label: string }
 type ProviderConfiguration = { provider: string; model: string; base_url: string | null }
 type NavItem = 'Today' | 'Calendar' | 'Assignments' | 'Mastery' | 'Activity' | 'Settings'
 
-// In the packaged desktop app the main process reserves a free port at launch
-// and hands it to the renderer through the preload bridge. The literal is the
-// browser-only development fallback.
-const API_ORIGIN = window.academicOS?.apiBaseUrl ?? 'http://127.0.0.1:8000'
-const API = `${API_ORIGIN}/api/v1`
+// Relative on purpose. The desktop app serves this bundle from a loopback
+// origin that proxies /api to the backend, and Vite proxies /api in dev, so the
+// API is always same-origin: no CORS, no preflight, no port to discover.
+const API = '/api/v1'
 
 const localDate = (offset: number, hour: number, minute = 0) => {
   const date = addDays(new Date(), offset)

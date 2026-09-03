@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BackendProcess } from './backend.js'
 import { CanvasSession } from './canvas-session.js'
+import { startUiServer, type UiServer } from './ui-server.js'
 import { CredentialVault } from './credential-vault.js'
 import { ProviderCatalog } from './provider-catalog.js'
 
@@ -14,19 +15,19 @@ const canvasSession = new CanvasSession()
 const credentialVault = new CredentialVault()
 const providerCatalog = new ProviderCatalog(credentialVault)
 const backend = new BackendProcess(repoRoot)
+let uiServer: UiServer | null = null
 
 /** Match the renderer's first paint so launch never flashes the wrong colour. */
 const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#212121' : '#ffffff')
 
-function rendererEntry(): { devUrl?: string; file: string } {
-  const devUrl = process.env.VITE_DEV_SERVER_URL
-  if (devUrl) return { devUrl, file: '' }
-  // Packaged builds carry the compiled UI next to the app code inside the asar.
-  const base = app.isPackaged ? path.join(app.getAppPath(), 'apps/frontend/dist') : path.join(repoRoot, 'apps/frontend/dist')
-  return { file: path.join(base, 'index.html') }
+/** Directory holding the built renderer. Inside a packaged app it lives in the asar. */
+function rendererRoot(): string {
+  return app.isPackaged
+    ? path.join(app.getAppPath(), 'apps/frontend/dist')
+    : path.join(repoRoot, 'apps/frontend/dist')
 }
 
-function createWindow(apiBaseUrl: string): BrowserWindow {
+function createWindow(startUrl: string): BrowserWindow {
   const window = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -42,9 +43,6 @@ function createWindow(apiBaseUrl: string): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      // The renderer needs the port before its first fetch, and argv is the
-      // only channel available synchronously at preload time.
-      additionalArguments: [`--cadence-api-base=${apiBaseUrl}`],
     },
   })
 
@@ -55,9 +53,7 @@ function createWindow(apiBaseUrl: string): BrowserWindow {
     return { action: 'deny' }
   })
 
-  const { devUrl, file } = rendererEntry()
-  if (devUrl) void window.loadURL(devUrl)
-  else void window.loadFile(file)
+  void window.loadURL(startUrl)
 
   return window
 }
@@ -113,21 +109,30 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(async () => {
-    let apiBaseUrl: string
+    let startUrl: string
     try {
       const handle = await backend.start()
-      apiBaseUrl = handle.baseUrl
+      // In development Vite serves the renderer and proxies /api itself.
+      // Otherwise the UI is served from a loopback origin that proxies /api to
+      // the backend, so the renderer is same-origin with the API.
+      const devUrl = process.env.VITE_DEV_SERVER_URL
+      if (devUrl) {
+        startUrl = devUrl
+      } else {
+        uiServer = await startUiServer(rendererRoot(), handle.baseUrl)
+        startUrl = uiServer.origin
+      }
     } catch (error) {
       createErrorWindow(error instanceof Error ? error.message : 'The planner service failed to start.', backend.recentLog)
       return
     }
 
-    createWindow(apiBaseUrl)
+    createWindow(startUrl)
     nativeTheme.on('updated', () => {
       for (const window of BrowserWindow.getAllWindows()) window.setBackgroundColor(windowBackground())
     })
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl)
+      if (BrowserWindow.getAllWindows().length === 0) createWindow(startUrl)
     })
   })
 }
@@ -138,5 +143,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void canvasSession.close()
+  uiServer?.close()
   backend.stop()
 })
