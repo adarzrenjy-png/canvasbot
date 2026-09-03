@@ -83,9 +83,25 @@ error window reports the captured output instead of hanging on a blank screen.
 
 ### Signing and notarization
 
-Without credentials the build produces a working but **unsigned** bundle. macOS
-Gatekeeper will refuse it on first launch; right-click the app and choose
-**Open** to run it anyway.
+Installing is drag-and-drop: open the `.dmg` and drag **Cadence** to
+**Applications**. What happens on *first launch* depends on how it was built.
+
+Without credentials the build is **ad-hoc signed but not notarized**. Ad-hoc
+signing matters: Apple silicon refuses to launch unsigned arm64 code at all, and
+electron-builder does not fall back to ad-hoc on its own, so the build script
+sets the identity explicitly.
+
+An ad-hoc signed build still trips Gatekeeper, because it is not notarized. The
+first launch takes a detour:
+
+- **macOS 14 Sonoma and earlier** — right-click the app, choose **Open**, then
+  **Open** again in the dialog.
+- **macOS 15 Sequoia and later** — the right-click shortcut no longer works. Try
+  to open the app, dismiss the warning, then go to **System Settings → Privacy &
+  Security**, scroll to the message about Cadence, and click **Open Anyway**.
+
+Only a **signed and notarized** build launches on a plain double-click with no
+warning. That needs a paid Apple Developer account.
 
 To produce a distributable build, export your own credentials before building —
 they are read from the environment and never stored in this repository:
@@ -102,7 +118,8 @@ export APPLE_TEAM_ID=XXXXXXXXXX
 pnpm dist:mac
 ```
 
-The build script reports which of signing and notarization it detected.
+The build script reports which of signing and notarization it detected, and
+falls back to ad-hoc signing when neither is present.
 
 ### Known limitation
 

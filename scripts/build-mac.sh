@@ -32,19 +32,28 @@ echo "==> Building the backend binary"
 ./scripts/build-backend.sh
 
 echo "==> Packaging the app"
+SIGN_ARGS=()
 if [[ -n "${CSC_LINK:-}${CSC_NAME:-}" ]]; then
   echo "    Signing identity detected; the bundle will be signed."
   if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
     echo "    Notarization credentials detected; the bundle will be notarized."
   else
     echo "    No notarization credentials; skipping notarization."
+    echo "    Gatekeeper will still warn on first launch."
   fi
 else
-  echo "    No signing identity in the environment; building an unsigned bundle."
+  echo "    No signing identity in the environment; ad-hoc signing instead."
+  echo "    Apple silicon refuses to launch unsigned arm64 code, and"
+  echo "    electron-builder does not fall back to ad-hoc on its own, so the"
+  echo "    identity is set explicitly. Gatekeeper will still warn on first launch."
+  # hardenedRuntime with an ad-hoc signature enforces library validation, which
+  # would reject Electron's pre-signed framework. build/entitlements.mac.plist
+  # carries com.apple.security.cs.disable-library-validation for exactly this.
   export CSC_IDENTITY_AUTO_DISCOVERY=false
+  SIGN_ARGS+=(-c.mac.identity=-)
 fi
 
-pnpm exec electron-builder --mac "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}"
+pnpm exec electron-builder --mac "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}" "${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"}"
 
 echo
 echo "==> Done. Artifacts in release/:"
