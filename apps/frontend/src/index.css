@@ -1,52 +1,157 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+/* Inter is bundled locally so the packaged desktop app never needs the network. */
+@import '@fontsource-variable/inter';
 
 :root {
-  font-family: 'Manrope', sans-serif;
-  color: #25302a;
-  background: #f4f4ef;
+  /* Typography */
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg: #f4f4ef;
-  --panel: #fbfbf8;
-  --panel-strong: #ffffff;
-  --ink: #25302a;
-  --muted: #748078;
-  --line: #dcdfd8;
-  --line-soft: #e9ebe6;
-  --sage: #496458;
-  --sage-soft: #e6ece8;
-  --coral: #d7784a;
-  --coral-soft: #f8e9e1;
-  --amber: #b37b28;
-  --amber-soft: #f6eddc;
-  --blue: #586e8c;
-  --blue-soft: #e9edf2;
-  --shadow: 0 12px 36px rgba(44, 54, 48, .06);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+
+  color-scheme: light;
+  color: var(--ink);
+  background: var(--bg);
+
+  /* ---- Light theme ---- */
+  --bg: #ffffff;
+  --bg-sunken: #f9f9f9;
+  --rail: #f9f9f9;
+  --rail-ink: #0d0d0d;
+  --rail-muted: #8f8f8f;
+  --rail-hover: rgba(0, 0, 0, .05);
+  --rail-active: #ececec;
+  --rail-line: #e8e8e8;
+
+  --panel: #ffffff;
+  --panel-strong: #f9f9f9;
+  --panel-hover: #f4f4f4;
+
+  --ink: #0d0d0d;
+  --ink-soft: #40414f;
+  --muted: #8f8f8f;
+
+  --line: #e5e5e5;
+  --line-soft: #efefef;
+
+  /* Inverted primary action, the way ChatGPT does it */
+  --accent: #0d0d0d;
+  --accent-ink: #ffffff;
+  --accent-hover: #2a2a2a;
+
+  /* Semantic accents, deliberately muted */
+  --sage: #3f7d5c;
+  --sage-soft: #e9f2ec;
+  --coral: #c2562f;
+  --coral-soft: #fbeae3;
+  --amber: #9a6b17;
+  --amber-soft: #f8f0df;
+  --blue: #40628f;
+  --blue-soft: #e9eef5;
+
+  --seg-track: #f0f0f0;
+  --seg-active: #ffffff;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .04);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, .12);
+  --focus: #0d0d0d;
 }
 
 :root[data-theme='dark'] {
-  color: #e5e9e5;
-  background: #171c19;
-  --bg: #171c19;
-  --panel: #1e2521;
-  --panel-strong: #252d29;
-  --ink: #edf0ed;
-  --muted: #9ba69f;
-  --line: #354039;
-  --line-soft: #2c352f;
-  --sage: #9bb9aa;
-  --sage-soft: #2a3932;
-  --coral: #ed966d;
-  --coral-soft: #402c24;
+  color-scheme: dark;
+
+  --bg: #212121;
+  --bg-sunken: #1a1a1a;
+  --rail: #181818;
+  --rail-ink: #ececec;
+  --rail-muted: #9b9b9b;
+  --rail-hover: rgba(255, 255, 255, .06);
+  --rail-active: #2f2f2f;
+  --rail-line: #2c2c2c;
+
+  --panel: #2a2a2a;
+  --panel-strong: #303030;
+  --panel-hover: #343434;
+
+  --ink: #ececec;
+  --ink-soft: #d1d1d1;
+  --muted: #9b9b9b;
+
+  --line: #3a3a3a;
+  --line-soft: #303030;
+
+  --accent: #ffffff;
+  --accent-ink: #0d0d0d;
+  --accent-hover: #e0e0e0;
+
+  --sage: #7fc0a0;
+  --sage-soft: #24352c;
+  --coral: #f0916a;
+  --coral-soft: #3a2820;
   --amber: #ddb064;
-  --amber-soft: #3e3423;
-  --blue: #9fb4d1;
-  --blue-soft: #293440;
-  --shadow: 0 14px 40px rgba(0, 0, 0, .16);
+  --amber-soft: #362c1c;
+  --blue: #9db6d9;
+  --blue-soft: #232c38;
+
+  --seg-track: #1c1c1c;
+  --seg-active: #3d3d3d;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 4px 14px rgba(0, 0, 0, .2);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, .45);
+  --focus: #ececec;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); }
-button, textarea { font: inherit; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button, textarea, input, select { font: inherit; }
 button { color: inherit; }
-button:focus-visible, textarea:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* Quiet, overlay-style scrollbars to match the reference chrome. */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  border-radius: var(--r-pill);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 65%, transparent); background-clip: content-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

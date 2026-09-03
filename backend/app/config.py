@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     app_name: str = "Adaptive Academic Planner"
     database_url: str = f"sqlite:///{ROOT_DIR / 'planner.db'}"
     frontend_origin: str = "http://localhost:5173"
+    # Additional browser origins allowed to call the local API. The packaged
+    # desktop app loads the UI from disk, and Chromium sends "null" as the
+    # Origin for file:// documents.
+    extra_ui_origins: str = "null,http://localhost:5173,http://127.0.0.1:5173"
     demo_mode: bool = True
     api_prefix: str = "/api/v1"
     canvas_allowed_origins: str = "https://rutgers.instructure.com,https://netid.rutgers.edu"
@@ -20,6 +24,12 @@ class Settings(BaseSettings):
     mcp_remote_enabled: bool = False
 
     model_config = SettingsConfigDict(env_file=ROOT_DIR / ".env", extra="ignore")
+
+    @property
+    def allowed_ui_origins(self) -> list[str]:
+        """Every browser origin permitted to reach the local API, de-duplicated."""
+        origins = [self.frontend_origin, *self.extra_ui_origins.split(",")]
+        return list(dict.fromkeys(origin.strip() for origin in origins if origin.strip()))
 
 
 settings = Settings()
