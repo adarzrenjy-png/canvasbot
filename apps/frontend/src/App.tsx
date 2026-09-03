@@ -33,9 +33,10 @@ type ActivityEvent = {
   id: number; type: string; entity_type: string | null; entity_id: string | null
   payload: Record<string, unknown>; created_at: string
 }
-type ProviderId = 'openai' | 'anthropic'
+type ProviderId = 'openai' | 'anthropic' | 'zai' | 'custom'
 type ProviderModel = { id: string; label: string }
 type ProviderConfiguration = { provider: string; model: string; base_url: string | null }
+type BrainStatus = { provider: string | null; model: string | null; live: boolean; reason: string | null }
 type NavItem = 'Today' | 'Calendar' | 'Assignments' | 'Mastery' | 'Activity' | 'Settings'
 
 // Relative on purpose. The desktop app serves this bundle from a loopback
@@ -205,25 +206,51 @@ function ActivityView({ events }: { events: ActivityEvent[] }) {
   return <div className="full-view"><div className="view-intro"><div><span className="eyebrow">Audit trail</span><h2>Every meaningful change, visible.</h2><p>Worker observations become normalized events before they can affect your plan.</p></div></div><section className="panel activity-card">{events.length === 0 && <div className="activity-empty">No changes recorded yet.</div>}{events.map(event => <article className="activity-row" key={event.id}><div className="activity-mark"><History size={15} /></div><div><strong>{stateLabel(event.type.replaceAll('.', '_'))}</strong><span>{event.entity_type ? `${stateLabel(event.entity_type)} ${event.entity_id || ''}` : 'System event'}</span></div><time>{format(new Date(event.created_at), 'MMM d · h:mm a')}</time></article>)}</section></div>
 }
 
+const PROVIDERS: { id: ProviderId; label: string; hint: string; placeholder: string }[] = [
+  { id: 'openai', label: 'OpenAI', hint: 'GPT models from api.openai.com.', placeholder: 'sk-...' },
+  { id: 'anthropic', label: 'Anthropic', hint: 'Claude models from api.anthropic.com.', placeholder: 'sk-ant-...' },
+  { id: 'zai', label: 'Z.AI', hint: 'GLM models from api.z.ai.', placeholder: 'Z.AI API key' },
+  { id: 'custom', label: 'Custom', hint: 'Any OpenAI-compatible endpoint: OpenRouter, Ollama, vLLM, LM Studio.', placeholder: 'API key (any value if unauthenticated)' },
+]
+
 function ModelProviderSettings({ onMessage }: { onMessage: (message: string) => void }) {
   const [provider, setProvider] = useState<ProviderId>('openai')
   const [apiKey, setApiKey] = useState('')
+  const [baseUrlEdits, setBaseUrlEdits] = useState<Partial<Record<ProviderId, string>>>({})
   const [models, setModels] = useState<ProviderModel[]>([])
   const [model, setModel] = useState('')
   const [savedModels, setSavedModels] = useState<Partial<Record<ProviderId, string>>>({})
+  const [savedBaseUrls, setSavedBaseUrls] = useState<Partial<Record<ProviderId, string>>>({})
   const [hasKey, setHasKey] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [brain, setBrain] = useState<BrainStatus | null>(null)
+
+  const details = PROVIDERS.find(item => item.id === provider)!
+  // Derived rather than stored: an unedited field shows whatever was saved for
+  // the selected provider, so switching tabs needs no effect to resync it.
+  const baseUrl = baseUrlEdits[provider] ?? savedBaseUrls[provider] ?? ''
+  const setBaseUrl = (value: string) => setBaseUrlEdits(current => ({ ...current, [provider]: value }))
+
+  const refreshBrain = () => {
+    fetch(`${API}/providers/brain`).then(response => response.json()).then(setBrain).catch(() => setBrain(null))
+  }
 
   useEffect(() => {
     let active = true
     fetch(`${API}/providers`).then(response => response.json()).then((configurations: ProviderConfiguration[]) => {
       if (!active) return
-      const saved: Partial<Record<ProviderId, string>> = {}
+      const models: Partial<Record<ProviderId, string>> = {}
+      const urls: Partial<Record<ProviderId, string>> = {}
       for (const configuration of configurations) {
-        if (configuration.provider === 'openai' || configuration.provider === 'anthropic') saved[configuration.provider] = configuration.model
+        const id = PROVIDERS.find(item => item.id === configuration.provider)?.id
+        if (!id) continue
+        models[id] = configuration.model
+        if (configuration.base_url) urls[id] = configuration.base_url
       }
-      setSavedModels(saved)
+      setSavedModels(models)
+      setSavedBaseUrls(urls)
     }).catch(() => undefined)
+    refreshBrain()
     return () => { active = false }
   }, [])
 
@@ -240,18 +267,19 @@ function ModelProviderSettings({ onMessage }: { onMessage: (message: string) => 
 
   const loadModels = async () => {
     if (!window.academicOS) { onMessage('Provider setup is available in the desktop app.'); return }
+    if (provider === 'custom' && !baseUrl.trim()) { onMessage('Enter the endpoint base URL first.'); return }
     setLoading(true)
     try {
       if (apiKey.trim()) {
-        await window.academicOS.providers.saveKey(provider, apiKey)
+        await window.academicOS.providers.saveKey(provider, apiKey.trim())
         setApiKey(''); setHasKey(true)
       }
-      const available = await window.academicOS.providers.listModels(provider)
+      const available = await window.academicOS.providers.listModels(provider, baseUrl.trim() || null)
       setModels(available)
-      const savedModel = savedModels[provider]
-      if (available.length) setModel(available.some(item => item.id === savedModel) ? savedModel! : available[0].id)
-      onMessage(`${available.length} models available for this ${provider === 'openai' ? 'OpenAI' : 'Anthropic'} key.`)
-    } catch (error) { onMessage(error instanceof Error ? error.message : 'Could not load provider models.') }
+      setModel(savedModels[provider] && available.some(item => item.id === savedModels[provider]) ? savedModels[provider]! : available[0]?.id || '')
+      onMessage(`${available.length} model${available.length === 1 ? '' : 's'} available.`)
+      refreshBrain()
+    } catch (error) { onMessage(error instanceof Error ? error.message : 'Could not load models.') }
     finally { setLoading(false) }
   }
 
@@ -259,15 +287,93 @@ function ModelProviderSettings({ onMessage }: { onMessage: (message: string) => 
     if (!model) return
     setLoading(true)
     try {
-      const response = await fetch(`${API}/providers/${provider}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) })
-      if (!response.ok) throw new Error('The model selection could not be saved.')
+      const response = await fetch(`${API}/providers/${provider}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, base_url: baseUrl.trim() || null }),
+      })
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'The model selection could not be saved.')
       setSavedModels(current => ({ ...current, [provider]: model }))
+      if (baseUrl.trim()) setSavedBaseUrls(current => ({ ...current, [provider]: baseUrl.trim() }))
       onMessage(`${models.find(item => item.id === model)?.label || model} is now the Academic Brain.`)
+      refreshBrain()
     } catch (error) { onMessage(error instanceof Error ? error.message : 'Could not save the model.') }
     finally { setLoading(false) }
   }
 
-  return <section className="panel provider-card"><div className="provider-title"><div className="provider-icon"><Bot size={18} /></div><div><span className="eyebrow">Academic Brain</span><h3>Choose your model</h3><p>The picker shows models available to the API key you provide.</p></div></div><div className="provider-tabs"><button className={provider === 'openai' ? 'active' : ''} onClick={() => changeProvider('openai')}>OpenAI</button><button className={provider === 'anthropic' ? 'active' : ''} onClick={() => changeProvider('anthropic')}>Anthropic</button></div><label className="provider-field"><span><KeyRound size={13} /> API key</span><div><input type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={hasKey ? 'Key stored securely — enter to replace' : `Enter ${provider === 'openai' ? 'OpenAI' : 'Anthropic'} API key`} autoComplete="off" spellCheck={false} /><button onClick={loadModels} disabled={loading || (!hasKey && !apiKey.trim())}>{loading ? 'Checking…' : hasKey && !apiKey.trim() ? 'Refresh models' : 'Save & load models'}</button></div><small>Encrypted by the operating system. It is never saved in the planner database.</small></label>{models.length > 0 && <label className="provider-field"><span>Available model</span><div><select value={model} onChange={event => setModel(event.target.value)}>{models.map(item => <option value={item.id} key={item.id}>{item.label}{item.label === item.id ? '' : ` · ${item.id}`}</option>)}</select><button className="select-model" onClick={chooseModel} disabled={loading || !model}>Use model</button></div></label>}</section>
+  return <section className="panel provider-card">
+    <div className="provider-title">
+      <div className="provider-icon"><Bot size={18} /></div>
+      <div>
+        <span className="eyebrow">Academic Brain</span>
+        <h3>Choose your model</h3>
+        <p>{details.hint}</p>
+      </div>
+    </div>
+
+    <div className={`brain-status ${brain?.live ? 'live' : ''}`}>
+      <i />
+      <p>
+        <strong>{brain?.live ? `Live · ${brain.provider} · ${brain.model}` : 'Not active'}</strong>
+        <span>{brain?.live
+          ? 'Assignment analysis, calibration questions, and grading run on this model.'
+          : brain?.reason || 'Until a model is active, Cadence uses deterministic built-in logic.'}</span>
+      </p>
+    </div>
+
+    <div className="provider-tabs">
+      {PROVIDERS.map(item => (
+        <button key={item.id} className={provider === item.id ? 'active' : ''} onClick={() => changeProvider(item.id)}>{item.label}</button>
+      ))}
+    </div>
+
+    {provider === 'custom' && (
+      <label className="provider-field">
+        <span>Base URL</span>
+        <div>
+          <input
+            type="url"
+            value={baseUrl}
+            onChange={event => setBaseUrl(event.target.value)}
+            placeholder="http://localhost:11434/v1"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        <small>Must speak OpenAI&rsquo;s /chat/completions format. Remote endpoints require https.</small>
+      </label>
+    )}
+
+    <label className="provider-field">
+      <span><KeyRound size={13} /> API key</span>
+      <div>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={event => setApiKey(event.target.value)}
+          placeholder={hasKey ? 'Key stored securely — enter to replace' : details.placeholder}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button onClick={loadModels} disabled={loading || (!hasKey && !apiKey.trim())}>
+          {loading ? 'Checking…' : hasKey && !apiKey.trim() ? 'Refresh models' : 'Save & load models'}
+        </button>
+      </div>
+      <small>Encrypted by the operating system. It is never saved in the planner database.</small>
+    </label>
+
+    {models.length > 0 && (
+      <label className="provider-field">
+        <span>Available model</span>
+        <div>
+          <select value={model} onChange={event => setModel(event.target.value)}>
+            {models.map(item => <option value={item.id} key={item.id}>{item.label}{item.label === item.id ? '' : ` · ${item.id}`}</option>)}
+          </select>
+          <button className="select-model" onClick={chooseModel} disabled={loading || !model}>Use model</button>
+        </div>
+      </label>
+    )}
+  </section>
 }
 
 function SettingsView({ canvasStatus, onConnect, onMessage, theme, setTheme }: { canvasStatus: CanvasStatus; onConnect: () => void; onMessage: (message: string) => void; theme: ThemeChoice; setTheme: (v: ThemeChoice) => void }) {

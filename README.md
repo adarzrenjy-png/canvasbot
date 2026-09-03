@@ -22,7 +22,11 @@ Demo mode runs that path without network calls or API credits. Live Rutgers acce
 - Electron desktop shell with a narrow, sandboxed preload bridge
 - Persistent Playwright Canvas session, configurable Rutgers-only origins, and explicit password-field protection
 - Encrypted provider-secret vault backed by Electron `safeStorage`; raw keys never enter SQLite
-- Settings-based OpenAI/Anthropic model picker that loads the models available to the entered API key
+- Live Academic Brain: OpenAI, Anthropic, Z.AI (GLM), and any OpenAI-compatible
+  endpoint (OpenRouter, Ollama, vLLM, LM Studio) drive assignment analysis,
+  calibration questions, and answer grading
+- Settings model picker that loads the models available to the entered API key,
+  and states plainly whether the Brain is live or falling back to built-in logic
 - FastAPI/SQLModel service, SQLite migrations, durable jobs, domain events, and worker health
 - Stable Canvas URL identity, duplicate prevention, change detection, and scan failure/auth states
 - Credential-free demo Brain for assignment analysis, three-question calibration, and explainable time estimates
@@ -33,7 +37,11 @@ Demo mode runs that path without network calls or API credits. Live Rutgers acce
 - MCP 2.x server over stdio or loopback Streamable HTTP, with safe read tools and token-gated scan requests
 - 23 unit/integration tests plus TypeScript compilation and frontend linting
 
-The live Z.AI computer-use network adapter is intentionally not faked: public provider documentation does not currently define a stable GLM-5.3-Flash computer-use wire contract. The provider interface, constrained action executor, prompt, managed browser, scan schema, and downstream pipeline are ready for that adapter once a verified account/API contract is available. Remote MCP, provider-backed Brain grading, native notifications, and study timers remain on the task ledger. Installer packaging now ships (see **Building the macOS installer**); Apple code signing and notarization are wired but require your own Developer ID.
+The Canvas browser agent (autonomous scanning) still has no implementation:
+`ComputerUseProvider` is an interface with no concrete adapter. Manual Canvas
+sign-in through the managed browser works; autonomous scanning does not.
+Upstream's reasoning follows, and still holds for the vendor-specific
+screenshot protocol: the live Z.AI computer-use network adapter is intentionally not faked: public provider documentation does not currently define a stable GLM-5.3-Flash computer-use wire contract. The provider interface, constrained action executor, prompt, managed browser, scan schema, and downstream pipeline are ready for that adapter once a verified account/API contract is available. Remote MCP, native notifications, and study timers remain on the task ledger. Installer packaging now ships (see **Building the macOS installer**); Apple code signing and notarization are wired but require your own Developer ID.
 
 ## Quick start
 
@@ -52,7 +60,25 @@ pnpm dev
 
 Use **Connect Canvas** inside the desktop app. A managed browser opens for manual Rutgers authentication. Configure allowed authentication redirects through `CANVAS_ALLOWED_ORIGINS`; autonomous actions outside that list are rejected.
 
-Use **Settings → Academic Brain** to choose OpenAI or Anthropic, enter an API key, load the models available to that key, and select the model Cadence should route semantic tasks to. The key is encrypted by Electron in the operating-system-backed vault; only the provider and model selection are stored in SQLite.
+Use **Settings → Academic Brain** to pick a provider, enter an API key, load the
+models that key can reach, and choose the one Cadence routes semantic tasks to.
+
+| Provider | Endpoint | Notes |
+| --- | --- | --- |
+| OpenAI | `api.openai.com` | Chat models only; speech, image, and embedding models are filtered out |
+| Anthropic | `api.anthropic.com` | Uses the Messages API |
+| Z.AI | `api.z.ai` | GLM models, via the OpenAI-compatible surface |
+| Custom | you supply it | Anything speaking OpenAI's `/chat/completions`: OpenRouter, Ollama, vLLM, LM Studio |
+
+Remote custom endpoints must use https so the key is never sent in the clear;
+loopback URLs may use http.
+
+The panel shows whether the Brain is **live**. When no provider is configured,
+its key is missing, or a call fails, Cadence falls back to deterministic
+built-in logic rather than erroring — so a provider outage never blocks
+scheduling. Keys are encrypted by Electron in the OS-backed vault and pushed to
+the local service in memory only; they are **never written to SQLite**, which is
+enforced by a test.
 
 ## Building the macOS installer
 

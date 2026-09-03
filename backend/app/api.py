@@ -4,16 +4,20 @@ from datetime import datetime, timedelta
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlmodel import Session, select
 
+from . import credentials
+from .config import settings
 from .database import get_session
 from .canvas.reconcile import reconcile_scan
 from .canvas.schemas import CanvasScanResult
 from .models import Assignment, AssignmentState, BackgroundJob, CalendarEvent, CanvasWorkerState, Course, DomainEvent, MasteryRecord, ModelRoute, ProviderConfiguration, StudyBlock, SyncRun, Topic
+from .llm.factory import brain_status, get_brain
+from .llm.providers import SUPPORTED_PROVIDERS
 from .llm.routing import ModelTask
 from .pipeline import complete_demo_calibration, ensure_calibration
-from .schemas import AssignmentRead, BlockPatch, CalendarItemRead, CalibrationSubmission, CanvasScanRequest, CourseRead, ProviderSelection, ScheduleRequest
+from .schemas import AssignmentRead, BlockPatch, CalendarItemRead, CalibrationSubmission, CanvasScanRequest, CourseRead, ProviderCredential, ProviderSelection, ScheduleRequest
 from .services import recompute_schedule
 
 
@@ -98,17 +102,43 @@ def providers(session: Session = Depends(get_session)):
     return [{"provider": item.provider, "model": item.model, "base_url": item.base_url} for item in items]
 
 
+@router.get("/providers/brain")
+def brain(session: Session = Depends(get_session)):
+    """Which Brain is selected and whether it can actually be called right now."""
+    return brain_status(session)
+
+
+@router.put("/providers/{provider}/credential", status_code=204)
+def push_provider_credential(provider: str, payload: ProviderCredential, x_cadence_runtime_token: str | None = Header(default=None)):
+    """Receive an API key from the desktop vault for this process only.
+
+    The key is held in memory and never written to SQLite. The desktop app
+    re-pushes it on every launch. When a runtime token is configured, callers
+    must present it, so another local process cannot seed credentials.
+    """
+    if provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=422, detail="Unsupported Brain provider")
+    if settings.runtime_token and x_cadence_runtime_token != settings.runtime_token:
+        raise HTTPException(status_code=403, detail="Invalid runtime token")
+    credentials.set_key(provider, payload.api_key)
+    return Response(status_code=204)
+
+
 @router.put("/providers/{provider}")
 def select_brain_provider(provider: str, payload: ProviderSelection, session: Session = Depends(get_session)):
-    if provider not in {"openai", "anthropic"}:
+    if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=422, detail="Unsupported Brain provider")
+    if provider == "custom" and not (payload.base_url or "").strip():
+        raise HTTPException(status_code=422, detail="A base URL is required for a custom provider")
     configuration = session.exec(select(ProviderConfiguration).where(ProviderConfiguration.provider == provider)).first()
     if not configuration:
-        configuration = ProviderConfiguration(provider=provider, model=payload.model, credential_key=f"{provider}_api_key")
+        configuration = ProviderConfiguration(provider=provider, model=payload.model, base_url=payload.base_url, credential_key=f"{provider}_api_key")
         session.add(configuration)
         session.flush()
     else:
         configuration.model = payload.model
+        if payload.base_url is not None:
+            configuration.base_url = payload.base_url
         configuration.credential_key = f"{provider}_api_key"
     for task in ModelTask:
         if task == ModelTask.CANVAS_COMPUTER_USE:
@@ -159,8 +189,16 @@ def submit_calibration(assignment_id: int, payload: CalibrationSubmission, sessi
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     try:
-        from .llm.mock import DemoBrainProvider
-        scores = payload.demo_scores if payload.demo_scores is not None else DemoBrainProvider().grade_calibration(payload.answers)
+        if payload.demo_scores is not None:
+            scores = payload.demo_scores
+        else:
+            from .llm.mock import DemoBrainProvider
+            from .llm.providers import BrainError
+            try:
+                scores = get_brain(session).grade_calibration(payload.answers)
+            except BrainError:
+                # A provider outage must not block calibration; grade deterministically.
+                scores = DemoBrainProvider().grade_calibration(payload.answers)
         calibration, run = complete_demo_calibration(session, assignment, payload.answers, scores)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

@@ -1,10 +1,13 @@
+import logging
 from typing import Iterable
 
 from sqlmodel import Session, select
 
 from .estimation import estimate_time
 from .events import emit_event
+from .llm.factory import get_brain
 from .llm.mock import DemoBrainProvider
+from .llm.providers import BrainError
 from .models import (
     Assignment, AssignmentAnalysis, AssignmentState, Calibration, CalibrationAnswer,
     CalibrationQuestion, ModelUsageRecord,
@@ -12,17 +15,33 @@ from .models import (
 from .services import recompute_schedule
 from .state_machine import transition
 
+logger = logging.getLogger(__name__)
+
+
+def _with_fallback(session: Session, call, *args):
+    """Run a Brain call, degrading to the deterministic Brain if the live one fails.
+
+    A provider outage, a bad key, or a malformed reply must never block an
+    assignment from being analysed, so the demo Brain answers instead.
+    """
+    brain = get_brain(session)
+    try:
+        return getattr(brain, call)(*args), brain
+    except BrainError as error:
+        logger.warning("Brain call %s failed, using the demo Brain: %s", call, error)
+        demo = DemoBrainProvider()
+        return getattr(demo, call)(*args), demo
+
 
 def ensure_calibration(session: Session, assignment: Assignment, correlation_id: str | None = None) -> Calibration:
     existing = session.exec(select(Calibration).where(Calibration.assignment_id == assignment.id).order_by(Calibration.id.desc())).first()
     if existing:
         return existing
-    brain = DemoBrainProvider()
     calibration = Calibration(assignment_id=assignment.id, status="PENDING")
     session.add(calibration)
     session.flush()
     topics = assignment.extracted_topics or [assignment.assignment_type.lower(), "course fundamentals"]
-    generated = brain.generate_calibration(assignment.title, topics)
+    generated, _ = _with_fallback(session, "generate_calibration", assignment.title, topics)
     for position, question in enumerate(generated.questions, start=1):
         session.add(CalibrationQuestion(calibration_id=calibration.id, position=position, dimension=question.dimension, prompt=question.prompt, expected_topics=question.topics))
     emit_event(session, "diagnostic.required", entity_type="assignment", entity_id=str(assignment.id), payload={"question_count": 3}, correlation_id=correlation_id)
@@ -32,8 +51,7 @@ def ensure_calibration(session: Session, assignment: Assignment, correlation_id:
 
 
 def prepare_new_assignment(session: Session, assignment: Assignment, correlation_id: str) -> Calibration:
-    brain = DemoBrainProvider()
-    output = brain.analyze_assignment(assignment.title, assignment.description, assignment.assignment_type)
+    output, brain = _with_fallback(session, "analyze_assignment", assignment.title, assignment.description, assignment.assignment_type)
     assignment.state = transition(assignment.state, AssignmentState.ANALYZED)
     assignment.base_minutes = output.base_time_minutes
     assignment.estimated_minutes = output.base_time_minutes

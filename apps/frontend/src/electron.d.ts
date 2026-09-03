@@ -8,9 +8,9 @@ declare global {
         status: () => Promise<{ status: string; url: string | null; allowedOrigins: string[] }>
       }
       providers: {
-        saveKey: (provider: 'openai' | 'anthropic', apiKey: string) => Promise<{ stored: boolean }>
-        hasKey: (provider: 'openai' | 'anthropic') => Promise<boolean>
-        listModels: (provider: 'openai' | 'anthropic') => Promise<{ id: string; label: string }[]>
+        saveKey: (provider: string, apiKey: string) => Promise<{ stored: boolean }>
+        hasKey: (provider: string) => Promise<boolean>
+        listModels: (provider: string, baseUrl?: string | null) => Promise<{ id: string; label: string }[]>
       }
     }
   }

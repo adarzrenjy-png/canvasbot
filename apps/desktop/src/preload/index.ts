@@ -6,8 +6,8 @@ contextBridge.exposeInMainWorld('academicOS', {
     status: () => ipcRenderer.invoke('canvas:status'),
   },
   providers: {
-    saveKey: (provider: 'openai' | 'anthropic', apiKey: string) => ipcRenderer.invoke('provider:save-key', provider, apiKey),
-    hasKey: (provider: 'openai' | 'anthropic') => ipcRenderer.invoke('provider:has-key', provider),
-    listModels: (provider: 'openai' | 'anthropic') => ipcRenderer.invoke('provider:list-models', provider),
+    saveKey: (provider: string, apiKey: string) => ipcRenderer.invoke('provider:save-key', provider, apiKey),
+    hasKey: (provider: string) => ipcRenderer.invoke('provider:has-key', provider),
+    listModels: (provider: string, baseUrl?: string | null) => ipcRenderer.invoke('provider:list-models', provider, baseUrl),
   },
 })

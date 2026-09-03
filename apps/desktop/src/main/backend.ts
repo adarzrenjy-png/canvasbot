@@ -1,12 +1,15 @@
 import { app } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
 import path from 'node:path'
 
 export type BackendHandle = {
   port: number
   baseUrl: string
+  /** Shared secret required to push provider API keys into the backend. */
+  runtimeToken: string
 }
 
 /** Ask the OS for a free loopback port so two copies of the app never collide. */
@@ -72,6 +75,8 @@ export async function waitForBackend(baseUrl: string, timeoutMs = 45_000): Promi
 export class BackendProcess {
   private child: ChildProcess | null = null
   private handle: BackendHandle | null = null
+  // Fresh per launch, so a stale token can never be replayed against a new run.
+  private readonly runtimeToken = randomBytes(32).toString('hex')
   /** Recent stderr, surfaced in the error window when startup fails. */
   private log: string[] = []
 
@@ -79,6 +84,10 @@ export class BackendProcess {
 
   get baseUrl(): string | null {
     return this.handle?.baseUrl ?? null
+  }
+
+  get token(): string {
+    return this.runtimeToken
   }
 
   get recentLog(): string {
@@ -108,6 +117,7 @@ export class BackendProcess {
         CADENCE_API_HOST: '127.0.0.1',
         CADENCE_API_PORT: String(port),
         DATABASE_URL: `sqlite:///${databasePath}`,
+        RUNTIME_TOKEN: this.runtimeToken,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -137,7 +147,7 @@ export class BackendProcess {
       throw new Error(`The planner service exited early (code ${code ?? 'null'}, signal ${signal ?? 'none'})`)
     }
 
-    this.handle = { port, baseUrl }
+    this.handle = { port, baseUrl, runtimeToken: this.runtimeToken }
     return this.handle
   }
 

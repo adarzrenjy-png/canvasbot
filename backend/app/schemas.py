@@ -62,3 +62,11 @@ class CanvasScanRequest(BaseModel):
 
 class ProviderSelection(BaseModel):
     model: str = Field(min_length=1, max_length=200)
+    # Required for the "custom" provider, optional elsewhere to override the default host.
+    base_url: Optional[str] = Field(default=None, max_length=500)
+
+
+class ProviderCredential(BaseModel):
+    """An API key pushed in from the desktop vault. Held in memory, never stored."""
+
+    api_key: str = Field(min_length=1, max_length=500)

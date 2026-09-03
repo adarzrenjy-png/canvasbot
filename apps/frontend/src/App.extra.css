@@ -459,6 +459,37 @@
 .provider-field small { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 7px; }
 .provider-field button.select-model { background: var(--accent); }
 
+/* Whether the configured Brain can actually be called right now. */
+.brain-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--panel-strong);
+}
+
+.brain-status i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.brain-status.live i { background: var(--sage); }
+.brain-status p { margin: 0; }
+.brain-status strong, .brain-status span { display: block; }
+.brain-status strong { font-size: 13px; font-weight: 500; }
+.brain-status span { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 3px; }
+
+/* Four providers no longer fit a two-column grid. */
+.provider-tabs { grid-template-columns: repeat(4, 1fr); }
+.provider-tabs button { padding: 0 4px; }
+
 /* ============================================================
    Worker + activity
    ============================================================ */

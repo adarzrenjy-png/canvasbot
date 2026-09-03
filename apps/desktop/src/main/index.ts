@@ -95,7 +95,7 @@ ipcMain.handle('provider:save-key', async (_event, provider: string, apiKey: str
   return { stored: true }
 })
 ipcMain.handle('provider:has-key', (_event, provider: string) => providerCatalog.hasKey(provider))
-ipcMain.handle('provider:list-models', (_event, provider: string) => providerCatalog.listModels(provider))
+ipcMain.handle('provider:list-models', (_event, provider: string, baseUrl?: string | null) => providerCatalog.listModels(provider, baseUrl))
 
 // A second copy would fight over the SQLite file and the Canvas browser profile.
 if (!app.requestSingleInstanceLock()) {
@@ -112,6 +112,10 @@ if (!app.requestSingleInstanceLock()) {
     let startUrl: string
     try {
       const handle = await backend.start()
+      // Stored vault keys only live in the backend's memory, so they have to be
+      // handed over on every launch before the Brain can be used.
+      providerCatalog.setBackendTarget({ baseUrl: handle.baseUrl, runtimeToken: handle.runtimeToken })
+      void providerCatalog.syncStoredKeys()
       // In development Vite serves the renderer and proxies /api itself.
       // Otherwise the UI is served from a loopback origin that proxies /api to
       // the backend, so the renderer is same-origin with the API.

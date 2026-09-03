@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     zai_base_url: str = "https://api.z.ai/api/paas/v4"
     mcp_write_token: str = ""
     mcp_remote_enabled: bool = False
+    # Shared secret the desktop app presents when pushing provider API keys into
+    # this process. Generated per launch; empty in development leaves the
+    # endpoint open on loopback.
+    runtime_token: str = ""
 
     model_config = SettingsConfigDict(env_file=ROOT_DIR / ".env", extra="ignore")
 
