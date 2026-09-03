@@ -15,7 +15,10 @@ persisted Canvas scan job
 → React UI + activity trail + MCP
 ```
 
-Demo mode runs that path without network calls or API credits. Live Rutgers access uses a dedicated Playwright browser profile in Electron: the user signs in and completes MFA manually, the app retains the browser session, and the worker never handles a Rutgers password.
+A new install starts **empty** and fills from Canvas: there is no sample
+coursework standing in for yours. Set `DEMO_MODE=true` to seed the sample
+courses used by the walkthrough; demo mode runs the whole path above without
+network calls or API credits. Live Rutgers access uses a dedicated Playwright browser profile in Electron: the user signs in and completes MFA manually, the app retains the browser session, and the worker never handles a Rutgers password.
 
 ## What works
 
@@ -31,6 +34,8 @@ Demo mode runs that path without network calls or API credits. Live Rutgers acce
 - Stable Canvas URL identity, duplicate prevention, change detection, and scan failure/auth states
 - Credential-free demo Brain for assignment analysis, three-question calibration, and explainable time estimates
 - Deterministic scheduling with conflicts, protected blocks, split limits, and deadline safety buffers
+- First-run setup collecting your name, study hours, focus block length, and
+  deadline buffer, with Settings writing through to the same values
 - Today, Calendar, Assignments, Mastery, Activity, Settings, Canvas status, and calibration UI
 - Inter-based interface with light, dark, and system themes; fonts are bundled, so the app renders correctly offline
 - macOS installer build producing a .dmg with the Python backend frozen into the bundle
@@ -234,6 +239,21 @@ Guard rails:
   model can react to, so it can pick a different element.
 - **A live model is required.** The deterministic demo Brain cannot drive a
   browser, and the agent says so rather than inventing actions.
+
+## First run
+
+The app opens on a four-step setup: your name and term, the hours study blocks
+may occupy, how long a focus block may run and how far ahead of a deadline to
+finish, then an optional Canvas connection.
+
+Everything it collects is a real scheduling constraint — the planner reads the
+same `UserPreferences` row when it places blocks — and every value stays
+editable in **Settings**, where each control writes through immediately and
+replans the calendar.
+
+Until Canvas is connected the planner is genuinely empty rather than populated
+with samples. Preferences live in SQLite under Electron's user-data directory,
+never in the app bundle.
 
 ## Local services
 

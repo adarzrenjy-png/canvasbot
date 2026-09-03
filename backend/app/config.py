@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     # desktop app loads the UI from disk, and Chromium sends "null" as the
     # Origin for file:// documents.
     extra_ui_origins: str = "null,http://localhost:5173,http://127.0.0.1:5173"
-    demo_mode: bool = True
+    # Off by default: a new install starts empty and fills from Canvas. Set
+    # DEMO_MODE=true to seed the sample courses used by the demo walkthrough.
+    demo_mode: bool = False
     api_prefix: str = "/api/v1"
     canvas_allowed_origins: str = "https://rutgers.instructure.com,https://netid.rutgers.edu"
     canvas_scan_interval_hours: int = 8

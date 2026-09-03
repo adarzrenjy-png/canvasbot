@@ -14,12 +14,16 @@ from .config import settings
 from .database import get_session
 from .canvas.reconcile import reconcile_scan
 from .canvas.schemas import CanvasScanResult
-from .models import Assignment, AssignmentState, BackgroundJob, CalendarEvent, CanvasWorkerState, Course, DomainEvent, MasteryRecord, ModelRoute, ProviderConfiguration, StudyBlock, SyncRun, Topic
+from .models import (
+    Assignment, AssignmentState, BackgroundJob, CalendarEvent, CanvasWorkerState, Course,
+    DomainEvent, MasteryRecord, ModelRoute, ProviderConfiguration, StudyBlock, SyncRun, Topic,
+    UserPreferences, utcnow,
+)
 from .llm.factory import brain_status, get_brain
 from .llm.providers import SUPPORTED_PROVIDERS
 from .llm.routing import ModelTask
 from .pipeline import complete_demo_calibration, ensure_calibration
-from .schemas import AssignmentRead, BlockPatch, CalendarItemRead, CalibrationSubmission, CanvasScanRequest, CourseRead, ProviderCredential, ProviderSelection, ScheduleRequest
+from .schemas import AssignmentRead, BlockPatch, CalendarItemRead, CalibrationSubmission, CanvasScanRequest, CourseRead, PreferencesRead, PreferencesUpdate, ProviderCredential, ProviderSelection, ScheduleRequest
 from .services import recompute_schedule
 
 
@@ -96,6 +100,40 @@ def canvas_status(session: Session = Depends(get_session)):
     if not state:
         return {"status": "DISCONNECTED", "session_status": "NOT_CONFIGURED", "last_scan_at": None, "next_scan_at": None, "courses_observed": 0, "last_result": "Connect Canvas to begin"}
     return state
+
+
+def _preferences(session: Session) -> UserPreferences:
+    """The single preferences row, created on first read."""
+    preferences = session.exec(select(UserPreferences)).first()
+    if not preferences:
+        preferences = UserPreferences()
+        session.add(preferences)
+        session.commit()
+        session.refresh(preferences)
+    return preferences
+
+
+@router.get("/preferences", response_model=PreferencesRead)
+def read_preferences(session: Session = Depends(get_session)):
+    return _preferences(session)
+
+
+@router.put("/preferences", response_model=PreferencesRead)
+def update_preferences(payload: PreferencesUpdate, session: Session = Depends(get_session)):
+    preferences = _preferences(session)
+    for field, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
+        setattr(preferences, field, value)
+    if preferences.day_end_hour <= preferences.day_start_hour:
+        raise HTTPException(status_code=422, detail="The study day must end after it starts")
+    if preferences.max_block_minutes < preferences.min_block_minutes:
+        raise HTTPException(status_code=422, detail="The longest block cannot be shorter than the shortest one")
+    preferences.updated_at = utcnow()
+    session.add(preferences)
+    session.commit()
+    session.refresh(preferences)
+    # Boundaries feed the scheduler, so replanning keeps the calendar honest.
+    recompute_schedule(session, "preferences updated")
+    return preferences
 
 
 @router.get("/providers")
