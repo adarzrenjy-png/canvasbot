@@ -126,6 +126,10 @@ class RemoteBrainProvider(LLMProvider):
     async def generate_structured(self, prompt: str, schema: Type[BaseModel]) -> Any:
         return self._structured("Reply with JSON only.", prompt, schema)
 
+    def structured(self, system: str, user: str, schema: Type[BaseModel]):
+        """Prompt for JSON matching ``schema``, retrying once on a parse failure."""
+        return self._structured(system, user, schema)
+
     # -- structured helper ----------------------------------------------------
 
     def _structured(self, system: str, user: str, schema: Type[BaseModel]):

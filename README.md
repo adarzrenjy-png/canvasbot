@@ -34,14 +34,14 @@ Demo mode runs that path without network calls or API credits. Live Rutgers acce
 - Today, Calendar, Assignments, Mastery, Activity, Settings, Canvas status, and calibration UI
 - Inter-based interface with light, dark, and system themes; fonts are bundled, so the app renders correctly offline
 - macOS installer build producing a .dmg with the Python backend frozen into the bundle
+- Model-agnostic browser agent: any JSON-capable model drives the managed
+  Canvas browser through a constrained action vocabulary
 - MCP 2.x server over stdio or loopback Streamable HTTP, with safe read tools and token-gated scan requests
 - 23 unit/integration tests plus TypeScript compilation and frontend linting
 
-The Canvas browser agent (autonomous scanning) still has no implementation:
-`ComputerUseProvider` is an interface with no concrete adapter. Manual Canvas
-sign-in through the managed browser works; autonomous scanning does not.
-Upstream's reasoning follows, and still holds for the vendor-specific
-screenshot protocol: the live Z.AI computer-use network adapter is intentionally not faked: public provider documentation does not currently define a stable GLM-5.3-Flash computer-use wire contract. The provider interface, constrained action executor, prompt, managed browser, scan schema, and downstream pipeline are ready for that adapter once a verified account/API contract is available. Remote MCP, native notifications, and study timers remain on the task ledger. Installer packaging now ships (see **Building the macOS installer**); Apple code signing and notarization are wired but require your own Developer ID.
+The Canvas browser agent now runs on a model-agnostic Playwright harness (see
+**Browser agent** below) rather than a vendor-specific computer-use protocol.
+Upstream's reasoning for not faking the latter still stands: the live Z.AI computer-use network adapter is intentionally not faked: public provider documentation does not currently define a stable GLM-5.3-Flash computer-use wire contract. The provider interface, constrained action executor, prompt, managed browser, scan schema, and downstream pipeline are ready for that adapter once a verified account/API contract is available. Remote MCP, native notifications, and study timers remain on the task ledger. Installer packaging now ships (see **Building the macOS installer**); Apple code signing and notarization are wired but require your own Developer ID.
 
 ## Quick start
 
@@ -197,6 +197,44 @@ installed **Google Chrome** (`channel: 'chrome'`); Chromium is deliberately not
 bundled, which keeps the installer small but means Chrome must be present for
 Canvas sign-in. Everything else, including demo mode, runs without it.
 
+## Browser agent
+
+The Canvas agent is driven by **any model that can emit JSON**, not by a
+vendor-specific computer-use API. Screenshot-and-pixel-coordinate protocols
+differ per provider and lock you to one vendor; this harness works with
+everything in the provider table above, including local models.
+
+Each step:
+
+1. **Observe** — the page is described as text: URL, title, trimmed body copy,
+   and every visible interactive element. Each element is tagged in the DOM with
+   a `data-cadence-ref` attribute.
+2. **Plan** — the observation, the goal, and the steps so far go to the
+   configured Brain, which returns exactly one action as JSON.
+3. **Execute** — the action is validated against the schema in *both* Python and
+   TypeScript, then run through the constrained executor.
+
+Because elements are tagged before being described, the model chooses targets
+from a list it was shown rather than inventing CSS selectors that match nothing.
+
+The action vocabulary is fixed: `click`, `double_click`, `type_text`,
+`press_key`, `scroll`, `navigate`, `go_back`, `wait`, `read_page`, `finish`,
+`fail`. Anything else is rejected before it reaches the browser.
+
+Guard rails:
+
+- **Passwords are never typed.** The executor refuses `type_text` on a password
+  field, and password values are never read back into an observation. The agent
+  is told to stop and report if a page demands sign-in.
+- **Navigation is confined** to `CANVAS_ALLOWED_ORIGINS`.
+- **Runs are bounded** by a step budget (25 by default, 50 maximum).
+- **Actions time out in 10 seconds**, so a stale selector costs one step rather
+  than stalling the run on Playwright's 30-second default.
+- **Failures are fed back, not thrown** — a rejected action becomes history the
+  model can react to, so it can pick a different element.
+- **A live model is required.** The deterministic demo Brain cannot drive a
+  browser, and the agent says so rather than inventing actions.
+
 ## Local services
 
 `./scripts/dev.sh` serves the API on a fixed port, with documentation at
@@ -242,6 +280,7 @@ apps/frontend/       React + TypeScript + Vite desktop interface
 backend/app/         Canonical data, REST/MCP, reconciliation, jobs, Brain pipeline, scheduler
 backend/migrations/  Alembic history
 prompts/             Versioned model instructions
+backend/app/agent/   Browser agent planning and the shared action schema
 tests/               Domain, scheduler, Canvas, worker, API, and MCP tests
 packaging/           PyInstaller entry point and spec for the backend binary
 build/               electron-builder resources: app icon and entitlements

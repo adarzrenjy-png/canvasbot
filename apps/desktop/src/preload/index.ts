@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('academicOS', {
   canvas: {
     connect: () => ipcRenderer.invoke('canvas:connect'),
     status: () => ipcRenderer.invoke('canvas:status'),
+    runAgent: (goal: string, maxSteps?: number) => ipcRenderer.invoke('canvas:run-agent', goal, maxSteps),
   },
   providers: {
     saveKey: (provider: string, apiKey: string) => ipcRenderer.invoke('provider:save-key', provider, apiKey),

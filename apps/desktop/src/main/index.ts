@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BackendProcess } from './backend.js'
+import { BackendActionPlanner, BrowserAgent } from './browser-agent.js'
 import { CanvasSession } from './canvas-session.js'
 import { startUiServer, type UiServer } from './ui-server.js'
 import { CredentialVault } from './credential-vault.js'
@@ -16,6 +17,7 @@ const credentialVault = new CredentialVault()
 const providerCatalog = new ProviderCatalog(credentialVault)
 const backend = new BackendProcess(repoRoot)
 let uiServer: UiServer | null = null
+let browserAgent: BrowserAgent | null = null
 
 /** Match the renderer's first paint so launch never flashes the wrong colour. */
 const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#212121' : '#ffffff')
@@ -95,6 +97,12 @@ ipcMain.handle('provider:save-key', async (_event, provider: string, apiKey: str
   return { stored: true }
 })
 ipcMain.handle('provider:has-key', (_event, provider: string) => providerCatalog.hasKey(provider))
+ipcMain.handle('canvas:run-agent', async (_event, goal: string, maxSteps?: number) => {
+  if (!browserAgent) throw new Error('The planner service is not ready yet.')
+  if (typeof goal !== 'string' || !goal.trim()) throw new Error('Describe what the agent should do.')
+  // Bounded so a runaway plan cannot drive the browser indefinitely.
+  return browserAgent.run(goal.trim(), Math.min(Math.max(Number(maxSteps) || 25, 1), 50))
+})
 ipcMain.handle('provider:list-models', (_event, provider: string, baseUrl?: string | null) => providerCatalog.listModels(provider, baseUrl))
 
 // A second copy would fight over the SQLite file and the Canvas browser profile.
@@ -116,6 +124,7 @@ if (!app.requestSingleInstanceLock()) {
       // handed over on every launch before the Brain can be used.
       providerCatalog.setBackendTarget({ baseUrl: handle.baseUrl, runtimeToken: handle.runtimeToken })
       void providerCatalog.syncStoredKeys()
+      browserAgent = new BrowserAgent(canvasSession, new BackendActionPlanner(handle.baseUrl))
       // In development Vite serves the renderer and proxies /api itself.
       // Otherwise the UI is served from a loopback origin that proxies /api to
       // the backend, so the renderer is same-origin with the API.

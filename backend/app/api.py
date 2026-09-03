@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlmodel import Session, select
 
 from . import credentials
+from .agent.planner import AgentError, plan_next_action
+from .agent.schemas import NextActionRequest
 from .config import settings
 from .database import get_session
 from .canvas.reconcile import reconcile_scan
@@ -151,6 +153,20 @@ def select_brain_provider(provider: str, payload: ProviderSelection, session: Se
             session.add(ModelRoute(task=task.value, provider_configuration_id=configuration.id))
     session.commit()
     return {"provider": configuration.provider, "model": configuration.model, "brain_routes_updated": len(ModelTask) - 1}
+
+
+@router.post("/agent/next-action")
+def agent_next_action(payload: NextActionRequest, session: Session = Depends(get_session)):
+    """Plan one browser-agent step from a page observation.
+
+    The executor holds the browser; this only decides what to do next, so a
+    rejected or malformed action costs a step rather than touching the page.
+    """
+    try:
+        envelope = plan_next_action(session, payload)
+    except AgentError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return envelope.model_dump()
 
 
 @router.post("/canvas/scans")
