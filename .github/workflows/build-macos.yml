@@ -57,21 +57,21 @@ jobs:
             echo "Intel build not requested; skipping."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.build == 'true'
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.gate.outputs.build == 'true'
         with:
           version: 11.19.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.gate.outputs.build == 'true'
         with:
           node-version: '22'
           cache: pnpm
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.gate.outputs.build == 'true'
         with:
           # Must match the runner's architecture; PyInstaller freezes against
@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload the installer
         if: steps.gate.outputs.build == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cadence-macos-${{ matrix.arch }}
           path: |

@@ -79,7 +79,11 @@ else
   SIGN_ARGS+=(-c.mac.identity=-)
 fi
 
-pnpm exec electron-builder --mac "${ARCH_ARGS[@]}" "${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"}"
+# --publish never is required, not cosmetic: electron-builder auto-detects CI
+# and tries to publish to GitHub Releases, failing the build on a missing
+# GH_TOKEN even though the .dmg built fine. Releases are this repo's
+# workflow job, not electron-builder's.
+pnpm exec electron-builder --mac "${ARCH_ARGS[@]}" "${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"}" --publish never
 
 echo
 echo "==> Done. Artifacts in release/:"
