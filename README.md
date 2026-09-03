@@ -28,10 +28,12 @@ Demo mode runs that path without network calls or API credits. Live Rutgers acce
 - Credential-free demo Brain for assignment analysis, three-question calibration, and explainable time estimates
 - Deterministic scheduling with conflicts, protected blocks, split limits, and deadline safety buffers
 - Today, Calendar, Assignments, Mastery, Activity, Settings, Canvas status, and calibration UI
+- Inter-based interface with light, dark, and system themes; fonts are bundled, so the app renders correctly offline
+- macOS installer build producing a .dmg with the Python backend frozen into the bundle
 - MCP 2.x server over stdio or loopback Streamable HTTP, with safe read tools and token-gated scan requests
 - 23 unit/integration tests plus TypeScript compilation and frontend linting
 
-The live Z.AI computer-use network adapter is intentionally not faked: public provider documentation does not currently define a stable GLM-5.3-Flash computer-use wire contract. The provider interface, constrained action executor, prompt, managed browser, scan schema, and downstream pipeline are ready for that adapter once a verified account/API contract is available. Remote MCP, provider-backed Brain grading, native notifications, study timers, and signed installers remain on the task ledger.
+The live Z.AI computer-use network adapter is intentionally not faked: public provider documentation does not currently define a stable GLM-5.3-Flash computer-use wire contract. The provider interface, constrained action executor, prompt, managed browser, scan schema, and downstream pipeline are ready for that adapter once a verified account/API contract is available. Remote MCP, provider-backed Brain grading, native notifications, and study timers remain on the task ledger. Installer packaging now ships (see **Building the macOS installer**); Apple code signing and notarization are wired but require your own Developer ID.
 
 ## Quick start
 
@@ -52,9 +54,69 @@ Use **Connect Canvas** inside the desktop app. A managed browser opens for manua
 
 Use **Settings → Academic Brain** to choose OpenAI or Anthropic, enter an API key, load the models available to that key, and select the model Cadence should route semantic tasks to. The key is encrypted by Electron in the operating-system-backed vault; only the provider and model selection are stored in SQLite.
 
+## Building the macOS installer
+
+The installer must be built **on macOS**: creating a `.dmg` and signing a bundle
+both require Apple tooling that exists nowhere else.
+
+```bash
+pnpm install
+pnpm dist:mac            # both architectures
+pnpm dist:mac:arm64      # Apple silicon only
+pnpm dist:mac:x64        # Intel only
+```
+
+Artifacts land in `release/` as `Cadence-<version>-<arch>.dmg` alongside a `.zip`.
+
+The build runs three stages: Vite compiles the renderer, `tsc` compiles the
+Electron main process, and PyInstaller freezes the FastAPI service into a single
+`cadence-backend` binary. That binary ships inside
+`Cadence.app/Contents/Resources/backend/`, so an installed copy needs **no
+Python, virtualenv, or pip** on the user's machine. The backend build
+smoke-tests the frozen binary — starting it, calling the API, shutting it
+down — and fails the build if it does not answer.
+
+At launch the app reserves a free loopback port, starts the backend with SQLite
+pointed at `~/Library/Application Support/Cadence/planner.db`, waits for the API
+to respond, and only then shows the window. If the service never answers, an
+error window reports the captured output instead of hanging on a blank screen.
+
+### Signing and notarization
+
+Without credentials the build produces a working but **unsigned** bundle. macOS
+Gatekeeper will refuse it on first launch; right-click the app and choose
+**Open** to run it anyway.
+
+To produce a distributable build, export your own credentials before building —
+they are read from the environment and never stored in this repository:
+
+```bash
+export CSC_LINK=/path/to/DeveloperID.p12   # or CSC_NAME="Developer ID Application: ..."
+export CSC_KEY_PASSWORD=...
+
+# Optional, for notarization:
+export APPLE_ID=you@example.com
+export APPLE_APP_SPECIFIC_PASSWORD=abcd-efgh-ijkl-mnop
+export APPLE_TEAM_ID=XXXXXXXXXX
+
+pnpm dist:mac
+```
+
+The build script reports which of signing and notarization it detected.
+
+### Known limitation
+
+**Connect Canvas** drives a managed browser through Playwright using your
+installed **Google Chrome** (`channel: 'chrome'`); Chromium is deliberately not
+bundled, which keeps the installer small but means Chrome must be present for
+Canvas sign-in. Everything else, including demo mode, runs without it.
+
 ## Local services
 
-API documentation is available at `http://127.0.0.1:8000/docs` while the app is running.
+`./scripts/dev.sh` serves the API on a fixed port, with documentation at
+`http://127.0.0.1:8000/docs`. The Electron app instead reserves a free port at
+launch to avoid collisions, so its API base is printed in the main-process log
+and exposed to the renderer as `window.academicOS.apiBaseUrl`.
 
 Local MCP over stdio:
 
@@ -73,9 +135,10 @@ Read tools expose courses, upcoming assignments, the week plan, recent changes, 
 ## Verification
 
 ```bash
-./scripts/test.sh
-pnpm lint
-pnpm build
+./scripts/test.sh          # pytest, then the frontend production build
+pnpm lint                  # frontend lint and desktop typecheck
+pnpm build                 # renderer and Electron main
+pnpm build:backend         # freeze the backend and smoke-test the binary
 ```
 
 Database models are in `backend/app/models.py`, with Alembic migrations in `backend/migrations/versions`:
@@ -94,6 +157,9 @@ backend/app/         Canonical data, REST/MCP, reconciliation, jobs, Brain pipel
 backend/migrations/  Alembic history
 prompts/             Versioned model instructions
 tests/               Domain, scheduler, Canvas, worker, API, and MCP tests
+packaging/           PyInstaller entry point and spec for the backend binary
+build/               electron-builder resources: app icon and entitlements
+scripts/             Development, test, and macOS packaging scripts
 ARCHITECTURE.md      Process boundaries and data flow
 DECISIONS.md         Engineering decisions and constraints
 TASKS.md             Completed slice and next depth passes
