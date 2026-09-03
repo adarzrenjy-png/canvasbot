@@ -1,14 +1,37 @@
 {
   "name": "cadence-academic-os",
+  "productName": "Cadence",
   "version": "0.2.0",
+  "description": "Local-first adaptive academic planner for macOS",
+  "author": "Cadence",
+  "license": "UNLICENSED",
   "private": true,
+  "type": "module",
+  "main": "apps/desktop/dist/main/index.js",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev": "pnpm --filter @cadence/desktop dev",
     "build": "pnpm --filter frontend build && pnpm --filter @cadence/desktop build",
     "lint": "pnpm --filter frontend lint && pnpm --filter @cadence/desktop typecheck",
     "test": "./scripts/test.sh",
+    "build:backend": "./scripts/build-backend.sh",
+    "dist:mac": "./scripts/build-mac.sh",
+    "dist:mac:arm64": "./scripts/build-mac.sh --arm64",
+    "dist:mac:x64": "./scripts/build-mac.sh --x64",
     "mcp:stdio": ".venv/bin/python -m backend.app.mcp_server --transport stdio",
     "mcp:http": ".venv/bin/python -m backend.app.mcp_server --transport streamable-http"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.0",
+    "cross-env": "^10.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "~6.0.2",
+    "wait-on": "^9.0.0"
   }
 }

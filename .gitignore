@@ -14,4 +14,9 @@ apps/desktop/node_modules/
 node_modules/
 playwright-report/
 test-results/
+
+# Packaging output. build/ itself is tracked: it holds the app icon and
+# entitlements that electron-builder reads as build resources.
+release/
+build/pyinstaller/
 backend/migrations/versions/__pycache__/

@@ -5,3 +5,6 @@ onlyBuiltDependencies:
   - electron
 allowBuilds:
   electron: true
+  # Windows installer tooling pulled in by electron-builder. Cadence targets
+  # macOS only, so its postinstall is not needed.
+  electron-winstaller: false
