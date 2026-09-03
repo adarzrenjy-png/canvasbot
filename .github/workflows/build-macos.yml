@@ -1,0 +1,121 @@
+name: Build macOS installer
+
+# Builds the .dmg on GitHub's macOS runners, so no local Mac is required.
+#
+# Each architecture is built on a runner of that architecture. This is not a
+# preference: PyInstaller freezes the backend for the machine it runs on and
+# cannot cross-compile, so an arm64 runner can only produce a working arm64
+# installer.
+#
+#   Run manually  — Actions tab -> "Build macOS installer" -> "Run workflow".
+#                   The .dmg is attached to the run as a downloadable artifact.
+#   Push a tag    — git tag v0.2.0 && git push origin v0.2.0
+#                   Creates a GitHub Release with the .dmg files attached.
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_intel:
+        description: 'Also build for Intel Macs (slower; most Macs are Apple silicon)'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.arch }} (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # One architecture failing should not discard the other's artifact.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+            flag: --arm64
+            # Apple silicon. Every Mac released since late 2020.
+            always: true
+          - runner: macos-15-intel
+            arch: x64
+            flag: --x64
+            # Intel. GitHub retires this image in August 2027.
+            always: false
+
+    steps:
+      - name: Skip Intel unless requested
+        id: gate
+        run: |
+          if [[ "${{ matrix.always }}" == "true" || "${{ github.event_name }}" == "push" || "${{ inputs.include_intel }}" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Intel build not requested; skipping."
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.build == 'true'
+
+      - uses: pnpm/action-setup@v6
+        if: steps.gate.outputs.build == 'true'
+        with:
+          version: 11.19.0
+
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.build == 'true'
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - uses: actions/setup-python@v7
+        if: steps.gate.outputs.build == 'true'
+        with:
+          # Must match the runner's architecture; PyInstaller freezes against
+          # whichever interpreter builds the binary.
+          python-version: '3.11'
+
+      - name: Build the installer
+        if: steps.gate.outputs.build == 'true'
+        # No signing secrets are configured, so build-mac.sh ad-hoc signs the
+        # bundle. To ship a notarized build, add CSC_LINK, CSC_KEY_PASSWORD,
+        # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID as repository
+        # secrets and pass them through as env here.
+        run: ./scripts/build-mac.sh ${{ matrix.flag }}
+
+      - name: Verify the bundled backend matches the target architecture
+        if: steps.gate.outputs.build == 'true'
+        # Guards against the exact failure this matrix exists to prevent: a .dmg
+        # whose frozen backend cannot execute on the machine it targets.
+        run: |
+          BINARY="release/backend/cadence-backend"
+          echo "Backend binary:"
+          file "$BINARY"
+          lipo -info "$BINARY" || true
+          if ! file "$BINARY" | grep -q "${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}"; then
+            echo "::error::Backend binary does not match ${{ matrix.arch }}"
+            exit 1
+          fi
+
+      - name: Upload the installer
+        if: steps.gate.outputs.build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cadence-macos-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to the release
+        if: steps.gate.outputs.build == 'true' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --title "Cadence ${GITHUB_REF_NAME}" --generate-notes \
+            || echo "Release already exists; uploading to it."
+          gh release upload "${GITHUB_REF_NAME}" release/*.dmg release/*.zip --clobber

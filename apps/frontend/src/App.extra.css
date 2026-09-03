@@ -459,6 +459,37 @@
 .provider-field small { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 7px; }
 .provider-field button.select-model { background: var(--accent); }
 
+/* Whether the configured Brain can actually be called right now. */
+.brain-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--panel-strong);
+}
+
+.brain-status i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.brain-status.live i { background: var(--sage); }
+.brain-status p { margin: 0; }
+.brain-status strong, .brain-status span { display: block; }
+.brain-status strong { font-size: 13px; font-weight: 500; }
+.brain-status span { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 3px; }
+
+/* Four providers no longer fit a two-column grid. */
+.provider-tabs { grid-template-columns: repeat(4, 1fr); }
+.provider-tabs button { padding: 0 4px; }
+
 /* ============================================================
    Worker + activity
    ============================================================ */
@@ -614,6 +645,74 @@
 
 .secondary-button:hover { background: var(--panel-hover); }
 .primary-button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ============================================================
+   Empty states
+   ============================================================ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 44px 24px;
+  color: var(--muted);
+}
+
+.empty-state svg { color: var(--muted); opacity: .65; margin-bottom: 4px; }
+.empty-state strong { color: var(--ink); font-size: 14px; font-weight: 500; }
+.empty-state span { font-size: 13px; max-width: 42ch; line-height: 1.55; }
+
+/* ============================================================
+   Onboarding
+   ============================================================ */
+.modal.onboarding { width: min(560px, 100%); }
+.onboarding .modal-top { align-items: center; }
+.onboarding-body { margin-top: 4px; }
+.onboarding-lead { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 16px; }
+.onboarding-body .provider-field + .provider-field { margin-top: 14px; }
+.onboarding-body .integration-row { margin: 4px 0 16px; }
+.onboarding-error { color: var(--coral); font-size: 13px; margin: 12px 0 0; }
+
+.preset-grid { display: grid; gap: 6px; margin-bottom: 18px; }
+
+.preset-grid button {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: var(--r-sm);
+  padding: 11px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+
+.preset-grid button:hover { background: var(--panel-hover); }
+.preset-grid button.active { border-color: var(--accent); background: var(--panel-hover); font-weight: 500; }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-row .provider-field { margin-top: 0; }
+.provider-field > span small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+
+/* ============================================================
+   Settings inputs
+   ============================================================ */
+.setting-input {
+  height: 36px;
+  min-width: 120px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: var(--r-sm);
+  padding: 0 11px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.setting-input:disabled { opacity: .55; cursor: not-allowed; }
+input.setting-input { cursor: text; min-width: 200px; }
+input.setting-input::placeholder { color: var(--muted); }
 
 /* ============================================================
    Toast + scrim

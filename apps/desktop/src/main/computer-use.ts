@@ -17,37 +17,39 @@ export const computerActionSchema = z.discriminatedUnion('action', [
 
 export type ComputerAction = z.infer<typeof computerActionSchema>
 
-export interface ComputerUseProvider {
-  createSession(): Promise<string>
-  runTask(instruction: string, screenshotBase64: string): Promise<ComputerAction>
-  continueTask(sessionId: string, observation: unknown, screenshotBase64: string): Promise<ComputerAction>
-  cancelTask(sessionId: string): Promise<void>
-  getUsage(sessionId: string): Promise<{ inputTokens: number; outputTokens: number; approximateCostUsd: number }>
-}
+// The agent is driven by a text observation of the page rather than screenshots
+// and pixel coordinates, so it works with any model that can emit JSON. See
+// browser-agent.ts for the planner interface and the run loop.
 
 export class CanvasActionExecutor {
-  constructor(private readonly session: CanvasSession) {}
+  /**
+   * Per-action ceiling. Playwright's 30s default is far too long when a model is
+   * driving: a stale ref would stall the run for half a minute before the model
+   * gets to see the failure and pick a different element.
+   */
+  constructor(private readonly session: CanvasSession, private readonly actionTimeoutMs = 10_000) {}
 
   async execute(rawAction: unknown): Promise<unknown> {
     const action = computerActionSchema.parse(rawAction)
     const page = this.session.getPage()
+    const timeout = this.actionTimeoutMs
     switch (action.action) {
-      case 'click': await page.locator(action.selector).click(); return { ok: true }
-      case 'double_click': await page.locator(action.selector).dblclick(); return { ok: true }
+      case 'click': await page.locator(action.selector).click({ timeout }); return { ok: true }
+      case 'double_click': await page.locator(action.selector).dblclick({ timeout }); return { ok: true }
       case 'scroll': await page.mouse.wheel(0, action.deltaY); return { ok: true }
       case 'type_text': {
         const target = page.locator(action.selector)
-        if ((await target.getAttribute('type'))?.toLowerCase() === 'password') throw new Error('The Canvas worker cannot type passwords')
-        await target.fill(action.text)
+        if ((await target.getAttribute('type', { timeout }))?.toLowerCase() === 'password') throw new Error('The Canvas worker cannot type passwords')
+        await target.fill(action.text, { timeout })
         return { ok: true }
       }
       case 'press_key': await page.keyboard.press(action.key); return { ok: true }
       case 'navigate': {
         if (!this.session.isAllowed(action.url)) throw new Error('Navigation is outside the configured academic origins')
-        await page.goto(action.url)
+        await page.goto(action.url, { timeout })
         return { ok: true, url: page.url() }
       }
-      case 'go_back': await page.goBack(); return { ok: true, url: page.url() }
+      case 'go_back': await page.goBack({ timeout }); return { ok: true, url: page.url() }
       case 'wait': await page.waitForTimeout(action.milliseconds); return { ok: true }
       case 'read_page': return { url: page.url(), title: await page.title(), text: (await page.locator('body').innerText()).slice(0, 50000) }
       case 'finish': return { finished: true, result: action.result }

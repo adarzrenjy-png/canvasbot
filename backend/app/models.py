@@ -46,12 +46,16 @@ class Timestamped(SQLModel):
 
 class UserPreferences(Timestamped, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    display_name: str = ""
+    term_label: str = ""
     day_start_hour: int = 8
     day_end_hour: int = 22
     preferred_start_hour: int = 16
     min_block_minutes: int = 30
     max_block_minutes: int = 90
     safety_buffer_hours: int = 12
+    # Set once the first-run flow finishes, so it is never shown twice.
+    onboarding_completed: bool = False
 
 
 class Course(Timestamped, table=True):
