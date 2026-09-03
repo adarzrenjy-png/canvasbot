@@ -1,0 +1,24 @@
+{
+  "name": "@cadence/desktop",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "pnpm build && concurrently -k \"pnpm --dir ../frontend dev --host 127.0.0.1\" \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist/main/index.js\""
+  },
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.0",
+    "cross-env": "^10.0.0",
+    "electron": "^38.0.0",
+    "typescript": "~6.0.2",
+    "wait-on": "^9.0.0"
+  }
+}

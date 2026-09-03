@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+
+:root {
+  font-family: 'Manrope', sans-serif;
+  color: #25302a;
+  background: #f4f4ef;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --bg: #f4f4ef;
+  --panel: #fbfbf8;
+  --panel-strong: #ffffff;
+  --ink: #25302a;
+  --muted: #748078;
+  --line: #dcdfd8;
+  --line-soft: #e9ebe6;
+  --sage: #496458;
+  --sage-soft: #e6ece8;
+  --coral: #d7784a;
+  --coral-soft: #f8e9e1;
+  --amber: #b37b28;
+  --amber-soft: #f6eddc;
+  --blue: #586e8c;
+  --blue-soft: #e9edf2;
+  --shadow: 0 12px 36px rgba(44, 54, 48, .06);
+}
+
+:root[data-theme='dark'] {
+  color: #e5e9e5;
+  background: #171c19;
+  --bg: #171c19;
+  --panel: #1e2521;
+  --panel-strong: #252d29;
+  --ink: #edf0ed;
+  --muted: #9ba69f;
+  --line: #354039;
+  --line-soft: #2c352f;
+  --sage: #9bb9aa;
+  --sage-soft: #2a3932;
+  --coral: #ed966d;
+  --coral-soft: #402c24;
+  --amber: #ddb064;
+  --amber-soft: #3e3423;
+  --blue: #9fb4d1;
+  --blue-soft: #293440;
+  --shadow: 0 14px 40px rgba(0, 0, 0, .16);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); }
+button, textarea { font: inherit; }
+button { color: inherit; }
+button:focus-visible, textarea:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }

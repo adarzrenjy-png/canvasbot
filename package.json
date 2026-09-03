@@ -1,0 +1,14 @@
+{
+  "name": "cadence-academic-os",
+  "version": "0.2.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm --filter @cadence/desktop dev",
+    "build": "pnpm --filter frontend build && pnpm --filter @cadence/desktop build",
+    "lint": "pnpm --filter frontend lint && pnpm --filter @cadence/desktop typecheck",
+    "test": "./scripts/test.sh",
+    "mcp:stdio": ".venv/bin/python -m backend.app.mcp_server --transport stdio",
+    "mcp:http": ".venv/bin/python -m backend.app.mcp_server --transport streamable-http"
+  }
+}
