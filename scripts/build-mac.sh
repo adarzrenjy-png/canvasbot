@@ -13,14 +13,40 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-ARCH_ARGS=()
+# PyInstaller cannot cross-compile: the frozen backend is always built for the
+# machine running the build. Packaging a different Electron architecture around
+# it would produce a .dmg whose backend cannot execute, so the build is pinned
+# to the host architecture unless explicitly overridden.
+case "$(uname -m)" in
+  arm64) HOST_ARCH=arm64 ;;
+  x86_64) HOST_ARCH=x64 ;;
+  *) echo "Unsupported host architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+TARGET_ARCH=""
 for argument in "$@"; do
   case "$argument" in
-    --arm64) ARCH_ARGS+=(--arm64) ;;
-    --x64) ARCH_ARGS+=(--x64) ;;
+    --arm64) TARGET_ARCH=arm64 ;;
+    --x64) TARGET_ARCH=x64 ;;
     *) echo "Unknown option: $argument" >&2; exit 1 ;;
   esac
 done
+TARGET_ARCH="${TARGET_ARCH:-$HOST_ARCH}"
+
+if [[ "$TARGET_ARCH" != "$HOST_ARCH" && "${CADENCE_ALLOW_CROSS_ARCH:-}" != "1" ]]; then
+  echo "Refusing to build $TARGET_ARCH on a $HOST_ARCH machine." >&2
+  echo >&2
+  echo "PyInstaller freezes the backend for the host architecture only, so the" >&2
+  echo "resulting .dmg would carry a backend that cannot run on the target." >&2
+  echo "Build each architecture on a matching machine — the GitHub Actions" >&2
+  echo "workflow in .github/workflows/build-macos.yml does exactly that." >&2
+  echo >&2
+  echo "Set CADENCE_ALLOW_CROSS_ARCH=1 to override (the build will be broken)." >&2
+  exit 1
+fi
+
+ARCH_ARGS=("--${TARGET_ARCH}")
+echo "==> Building for ${TARGET_ARCH} (host: ${HOST_ARCH})"
 
 echo "==> Installing node dependencies"
 pnpm install --frozen-lockfile
@@ -53,7 +79,7 @@ else
   SIGN_ARGS+=(-c.mac.identity=-)
 fi
 
-pnpm exec electron-builder --mac "${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"}" "${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"}"
+pnpm exec electron-builder --mac "${ARCH_ARGS[@]}" "${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"}"
 
 echo
 echo "==> Done. Artifacts in release/:"

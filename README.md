@@ -57,16 +57,45 @@ Use **Settings → Academic Brain** to choose OpenAI or Anthropic, enter an API 
 ## Building the macOS installer
 
 The installer must be built **on macOS**: creating a `.dmg` and signing a bundle
-both require Apple tooling that exists nowhere else.
+both require Apple tooling that exists nowhere else. You can build it on your own
+Mac, or let GitHub Actions do it.
+
+### On your Mac
 
 ```bash
 pnpm install
-pnpm dist:mac            # both architectures
-pnpm dist:mac:arm64      # Apple silicon only
-pnpm dist:mac:x64        # Intel only
+pnpm dist:mac
 ```
 
 Artifacts land in `release/` as `Cadence-<version>-<arch>.dmg` alongside a `.zip`.
+
+`pnpm dist:mac` builds for **the architecture of the machine you run it on**.
+That is a hard constraint rather than a default: PyInstaller freezes the backend
+for the host machine and cannot cross-compile, so packaging the other
+architecture would produce a `.dmg` whose backend cannot execute. The build
+script refuses a mismatched `--arm64`/`--x64` rather than emitting a broken
+installer.
+
+To build for the architecture you are not on, use CI.
+
+### On GitHub Actions
+
+`.github/workflows/build-macos.yml` builds on GitHub's macOS runners, so no local
+Mac is needed. Because of the cross-compilation constraint above, each
+architecture is built on a runner of that architecture.
+
+- **Manually** — Actions tab → *Build macOS installer* → *Run workflow*. The
+  `.dmg` is attached to the run as a downloadable artifact. Tick *Also build for
+  Intel Macs* if you need an Intel build; it is off by default, since every Mac
+  released since late 2020 is Apple silicon.
+- **On a tag** — `git tag v0.2.0 && git push origin v0.2.0` builds both
+  architectures and publishes a GitHub Release with the installers attached.
+
+The workflow verifies that the frozen backend inside each bundle actually matches
+its target architecture, and fails the build if it does not.
+
+Runner images: `macos-latest` is Apple silicon; the Intel job uses
+`macos-15-intel`, which GitHub retires in August 2027.
 
 The build runs three stages: Vite compiles the renderer, `tsc` compiles the
 Electron main process, and PyInstaller freezes the FastAPI service into a single

@@ -30,17 +30,15 @@ asarUnpack:
 mac:
   category: public.app-category.education
   icon: build/icon.png
+  # Architecture is supplied by scripts/build-mac.sh, which pins it to the host.
+  # PyInstaller cannot cross-compile the bundled backend, so a build must never
+  # package an Electron architecture the frozen binary does not match.
   target:
-    - target: dmg
-      arch:
-        - arm64
-        - x64
-    - target: zip
-      arch:
-        - arm64
-        - x64
-  # Signing is opt-in. Without a Developer ID in the environment, electron-builder
-  # produces an unsigned bundle that installs after right-click -> Open.
+    - dmg
+    - zip
+  # Signing is opt-in. Without a Developer ID in the environment,
+  # scripts/build-mac.sh passes an ad-hoc identity, which Apple silicon requires
+  # in order to launch the app at all.
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
