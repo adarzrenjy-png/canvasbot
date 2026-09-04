@@ -17,6 +17,14 @@ from __future__ import annotations
 import os
 import sys
 
+# Python puts this file's directory (packaging/) on sys.path, not the project
+# root, so "import backend" would fail when the script is run directly. A frozen
+# build carries its own import table and needs no help.
+if not getattr(sys, "frozen", False):
+    _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, _PROJECT_ROOT)
+
 
 def main() -> int:
     # Imported lazily so PyInstaller's dependency graph stays rooted here and

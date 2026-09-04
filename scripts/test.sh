@@ -4,5 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 .venv/bin/pytest
-cd apps/frontend
-pnpm build
+pnpm --filter frontend build
+pnpm --filter @cadence/desktop build
+./scripts/check-preload.sh

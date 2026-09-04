@@ -86,6 +86,12 @@ jobs:
         # secrets and pass them through as env here.
         run: ./scripts/build-mac.sh ${{ matrix.flag }}
 
+      - name: Verify the preload is CommonJS
+        if: steps.gate.outputs.build == 'true'
+        # A sandboxed Electron preload cannot be an ES module. If it is, the
+        # bridge silently vanishes and every desktop-only feature stops working.
+        run: ./scripts/check-preload.sh
+
       - name: Verify the bundled backend matches the target architecture
         if: steps.gate.outputs.build == 'true'
         # Guards against the exact failure this matrix exists to prevent: a .dmg
