@@ -66,6 +66,16 @@ const hourLabel = (hour: number) => {
   return `${display}:00 ${suffix}`
 }
 
+/**
+ * Electron wraps a rejected ipcRenderer.invoke as
+ * "Error invoking remote method 'x': Error: <cause>". Only the cause is useful
+ * to someone reading a toast.
+ */
+const ipcMessage = (error: unknown, fallback: string): string => {
+  if (!(error instanceof Error)) return fallback
+  return error.message.replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '') || fallback
+}
+
 const initials = (name: string) =>
   name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]!.toUpperCase()).join('') || '—'
 
@@ -290,7 +300,7 @@ function ModelProviderSettings({ onMessage }: { onMessage: (message: string) => 
       setModel(savedModels[provider] && available.some(item => item.id === savedModels[provider]) ? savedModels[provider]! : available[0]?.id || '')
       onMessage(`${available.length} model${available.length === 1 ? '' : 's'} available.`)
       refreshBrain()
-    } catch (error) { onMessage(error instanceof Error ? error.message : 'Could not load models.') }
+    } catch (error) { onMessage(ipcMessage(error, 'Could not load models.')) }
     finally { setLoading(false) }
   }
 
@@ -691,7 +701,7 @@ function App() {
       const result = await window.academicOS.canvas.connect()
       setCanvasStatus(current => ({ ...current, status: result.status === 'connected' ? 'CONNECTED' : result.status.toUpperCase(), session_status: result.status.toUpperCase(), last_result: result.status === 'auth_required' ? 'Finish signing in in the Canvas window.' : 'Managed Canvas browser is ready.' }))
       setToast(result.status === 'auth_required' ? 'Finish signing in in the Canvas window.' : 'Canvas browser session opened.')
-    } catch (error) { setToast(error instanceof Error ? error.message : 'Unable to open Canvas browser.') }
+    } catch (error) { setToast(ipcMessage(error, 'Unable to open Canvas browser.')) }
   }
 
   const calibrationCompleted = async (message: string) => {

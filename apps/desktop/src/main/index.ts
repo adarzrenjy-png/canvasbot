@@ -41,7 +41,9 @@ function createWindow(startUrl: string): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 14 },
     webPreferences: {
-      preload: path.join(currentDir, '../preload/index.js'),
+      // .cjs, not .cjs by accident: this package is type=module, and a
+      // sandboxed preload cannot be an ES module. Emitted from index.cts.
+      preload: path.join(currentDir, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

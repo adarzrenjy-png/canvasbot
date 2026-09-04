@@ -12,7 +12,13 @@ export class CredentialVault {
   }
 
   async set(key: string, value: string): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('OS credential encryption is unavailable')
+    if (!safeStorage.isEncryptionAvailable()) {
+      // Keys are only ever stored encrypted, so there is no fallback here.
+      throw new Error(
+        'The operating system keychain is unavailable, so the API key cannot be stored securely. ' +
+        'On macOS, unlock your login keychain in Keychain Access and try again.',
+      )
+    }
     const vault = await this.read()
     vault[key] = safeStorage.encryptString(value).toString('base64')
     await fs.mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 })
