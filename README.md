@@ -255,6 +255,22 @@ Until Canvas is connected the planner is genuinely empty rather than populated
 with samples. Preferences live in SQLite under Electron's user-data directory,
 never in the app bundle.
 
+## Identifying a build
+
+Every build carries a marker so two installers are never confusable:
+
+- **Sidebar**, under your profile — `Build 5 · 2c11045`
+- **Settings → Build** — the full string, `Build 5 · v0.2.0 · 2c11045`, selectable for pasting into a bug report
+
+The parts are the build number, the version from the workspace root
+`package.json`, and the short commit the bundle was built from. Vite bakes all
+three in at build time, so a screenshot alone identifies exactly what is running.
+
+**When opening a pull request, increment `buildNumber` in the root
+`package.json`.** It tracks merged pull requests: PR #5 shipped build 5. The
+commit hash distinguishes builds within a single PR, so the number only needs to
+move once per PR.
+
 ## Local services
 
 `./scripts/dev.sh` serves the API on a fixed port, with documentation at
