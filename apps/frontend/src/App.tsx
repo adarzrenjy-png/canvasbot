@@ -76,6 +76,11 @@ const ipcMessage = (error: unknown, fallback: string): string => {
   return error.message.replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '') || fallback
 }
 
+// Baked in at build time so a screenshot alone identifies the build.
+const BUILD = { number: __BUILD_NUMBER__, version: __APP_VERSION__, commit: __GIT_COMMIT__ }
+const BUILD_LABEL = `Build ${BUILD.number}`
+const BUILD_DETAIL = `Build ${BUILD.number} · v${BUILD.version} · ${BUILD.commit}`
+
 const initials = (name: string) =>
   name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]!.toUpperCase()).join('') || '—'
 
@@ -136,6 +141,7 @@ function Sidebar({ active, onChange, mobileOpen, onClose, canvasStatus, preferen
       <div className="sidebar-bottom">
         <div className="sync-card"><div className="sync-icon"><Cloud size={16} /></div><div><strong>Local workspace</strong><span>Canvas {canvasStatus.status.toLowerCase()}</span></div><span className={`status-dot ${canvasStatus.status === 'CONNECTED' ? 'online' : ''}`} /></div>
         <div className="profile"><div className="avatar">{initials(preferences.display_name)}</div><div><strong>{preferences.display_name || 'Set up your profile'}</strong><span>{preferences.term_label || 'No term set'}</span></div><button aria-label="Open settings" onClick={() => { onChange('Settings'); onClose() }}><Settings size={16} /></button></div>
+        <div className="build-marker" title={BUILD_DETAIL}>{BUILD_LABEL} · {BUILD.commit}</div>
       </div>
     </aside>
   </>
@@ -474,6 +480,11 @@ function SettingsView({ canvasStatus, onConnect, onMessage, theme, setTheme, pre
           <select className="setting-input" value={preferences.safety_buffer_hours} disabled={saving} onChange={event => void patch({ safety_buffer_hours: Number(event.target.value) })}>
             {[0, 6, 12, 24, 48].map(hours => <option key={hours} value={hours}>{hours === 0 ? 'No buffer' : `${hours} hours`}</option>)}
           </select>
+        </div>
+
+        <div className="setting">
+          <div><strong>Build</strong><span>Quote this when reporting a problem.</span></div>
+          <code className="build-detail">{BUILD_DETAIL}</code>
         </div>
 
         <div className="setting privacy-setting">

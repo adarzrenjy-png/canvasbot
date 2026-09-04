@@ -2,6 +2,7 @@
   "name": "cadence-academic-os",
   "productName": "Cadence",
   "version": "0.2.0",
+  "buildNumber": 5,
   "description": "Local-first adaptive academic planner for macOS",
   "author": "Cadence",
   "license": "UNLICENSED",
