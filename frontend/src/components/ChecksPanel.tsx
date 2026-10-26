@@ -82,7 +82,7 @@ export function ChecksPanel({ program, health, fea, stale, running, reportHref, 
           {running ? "Meshing and solving…" : fea ? "Run FEA again" : "Run FEA"}
         </button>
         {!feaReady && <p className="hint">{health?.fea.message} {health?.fea.install_hint}</p>}
-        {running && <p className="hint">Solving on two meshes to check the answer converges. This takes about half a minute.</p>}
+        {running && <p className="hint">Solving on two meshes (three if they disagree) to check the answer converges. This takes about half a minute.</p>}
       </section>
 
       {fea && !fea.ok && (
@@ -110,7 +110,7 @@ export function ChecksPanel({ program, health, fea, stale, running, reportHref, 
                 </span>
               </li>
             ))}
-            <li className={fea.convergence?.converged ? "ok" : "bad"} data-tip="Solved on a coarse and a finer mesh. If the answer barely changes, it can be trusted.">
+            <li className={fea.convergence?.converged ? "ok" : "bad"} data-tip="Solved on a coarse and a finer mesh, and a third if they disagree. If the answer barely changes between the finest two, it can be trusted.">
               {fea.convergence?.converged ? <CircleCheck size={15} /> : <CircleX size={15} />}
               <span>
                 Mesh converged: stress moved {fmt((fea.convergence?.stress_change ?? 0) * 100, 1)} % between meshes

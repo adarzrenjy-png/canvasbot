@@ -75,8 +75,12 @@ Modelled on how a careful team validates a fast model against a trusted one:
 
 - 10-node tetrahedra only (4-node ones are far too stiff in bending).
 - Loads applied as exact consistent nodal forces for 6-node faces.
-- Two meshes per run; the result counts only if the peak stress moves under 10 % and the largest
-  displacement under 5 %, and if the reactions balance the loads within 1 %.
+- Two meshes per run, and a third, finer one when the first two disagree; the result counts only
+  if the peak stress moves under 10 % and the largest displacement under 5 % between the two
+  finest, and if the reactions balance the loads within 1 %.
+- CalculiX runs its solver on one thread. Multithreaded SPOOLES gave different answers for the
+  same input deck (up to 0.8 % in peak stress), enough to flip a borderline convergence verdict.
+  One thread costs about 10 s per analysis and makes every verdict repeatable.
 - Peak stress is taken more than one element size away from fully fixed faces, because stress at
   an idealised clamp edge is a singularity that grows with refinement. The raw peak is still
   reported.
@@ -84,3 +88,22 @@ Modelled on how a careful team validates a fast model against a trusted one:
   stress) on every change.
 - The verdict (pass, fail, unconfirmed, invalid) is computed from numbers by code. The report
   is fixed templates filled with those numbers, so no model can write a figure into it.
+
+## 9. Agents propose, code decides
+
+- The Planner, Modeler and Fixer run on Muse Spark; the Verifier's design review runs on Muse
+  Spark Open (Baseten) and falls back to Muse Spark when Baseten is unreachable or has no key.
+  The trace says which model answered every call.
+- No model decides PASS. The verdict comes from checks that measure the result: the part format,
+  parameter limits, locks, one valid solid, size against the plan, the load case, and FEA; for
+  boards, DRC and ERC on the routed copper. The model review can only send work back to the Fixer.
+- Locked parameters are restored by code after every model edit, whatever the model wrote.
+- A fix may change the part, never the test: once the first program defines its loads and
+  `min_safety_factor`, a later program that lowers either fails a check and goes back to the
+  Fixer. Weakening the test is the cheapest way for a model to "pass", so it is ruled out.
+- A loaded part without a converged FEA run is reported as "not load-tested", never PASS.
+- The models are told the formats from the same source the parsers enforce, and the board
+  catalog they see is generated from the part library, so they are never told about a part or
+  pin that does not exist.
+- Tests drive the whole loop against a scripted mock of the Meta Model API: the models' answers
+  are fixed, everything else (builds, checks, routing, DRC/ERC) is real.

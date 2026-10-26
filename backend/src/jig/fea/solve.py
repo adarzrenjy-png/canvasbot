@@ -5,8 +5,9 @@
 3. Solve each mesh with CalculiX.
 4. Check the answer before trusting it:
    * equilibrium: the reactions at the fixtures must balance the applied loads;
-   * convergence: peak stress and displacement must settle between the two meshes.
-5. Score the finer mesh: safety factor = allowable stress / peak von Mises.
+   * convergence: peak stress and displacement must settle between the two finest
+     meshes. If the first two disagree, a third, finer mesh is solved first.
+5. Score the finest mesh: safety factor = allowable stress / peak von Mises.
 
 Peak stress is taken away from the fixtures. A fully fixed face is an idealised
 clamp, and the stress right at its edge grows without limit as the mesh is refined
@@ -38,6 +39,8 @@ from jig.fea.mesh import Mesh, match_surfaces, mesh_step
 from jig.fea.spec import AnalysisSpec, parse_analysis, select_faces
 
 STRESS_TOLERANCE = 0.10  # max change in peak stress between meshes to call it converged
+MAX_LEVELS = 3  # coarse, fine, and one finer mesh only when the first two disagree
+EXTRA_REFINEMENT = 1.35
 DISP_TOLERANCE = 0.05
 EQUILIBRIUM_TOLERANCE = 0.01
 
@@ -55,8 +58,9 @@ def _b64(values: array) -> str:
 def run_ccx(ccx: str, deck: str, work: Path, timeout_s: float) -> Path:
     work.mkdir(parents=True, exist_ok=True)
     (work / "job.inp").write_text(deck, encoding="ascii")
-    env = {**os.environ, "OMP_NUM_THREADS": str(os.cpu_count() or 1)}
-    env["CCX_NPROC_EQUATION_SOLVER"] = env["OMP_NUM_THREADS"]
+    # One solver thread: multithreaded SPOOLES gives slightly different answers run to run
+    # (up to about 1 % in peak stress here), and a verdict must not depend on the run.
+    env = {**os.environ, "OMP_NUM_THREADS": "1", "CCX_NPROC_EQUATION_SOLVER": "1"}
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         done = subprocess.run(
@@ -220,6 +224,17 @@ def surface_field(
     }
 
 
+def _change(fine: dict[str, Any], coarse: dict[str, Any], key: str) -> float:
+    return abs(fine[key] - coarse[key]) / max(abs(fine[key]), 1e-12)
+
+
+def _settled(coarse: dict[str, Any], fine: dict[str, Any]) -> bool:
+    return (
+        _change(fine, coarse, "peak_von_mises_mpa") <= STRESS_TOLERANCE
+        and _change(fine, coarse, "max_displacement_mm") <= DISP_TOLERANCE
+    )
+
+
 def analyze(job: dict[str, Any]) -> dict[str, Any]:
     out_dir = Path(job["out_dir"])
     spec = parse_analysis(job["analysis"], job.get("params", {}))
@@ -229,7 +244,9 @@ def analyze(job: dict[str, Any]) -> dict[str, Any]:
     base = float(job.get("mesh_size_mm") or diagonal / 25)
     sizes = [base, base / 1.6]
     levels = []
-    for n, size in enumerate(sizes):
+    n = 0
+    while n < len(sizes):
+        size = sizes[n]
         mesh = mesh_step(Path(job["step"]), size)
         needed = [face_info[i] for group in fixtures + loads for i in group[1]]
         mapping = match_surfaces(mesh, needed, diagonal)
@@ -244,18 +261,20 @@ def analyze(job: dict[str, Any]) -> dict[str, Any]:
             float(job.get("timeout_s", 300)),
         )
         levels.append((mesh, level))
+        # Two meshes that disagree earn one more, finer mesh before the result is judged.
+        if n >= 1 and len(sizes) < MAX_LEVELS and not _settled(levels[-2][1], level):
+            sizes.append(size / EXTRA_REFINEMENT)
+        n += 1
 
+    fields = [level.pop("_field") for _, level in levels]
     fine_mesh, fine = levels[-1]
-    coarse = levels[0][1]
-    ids, index, u, vm = fine.pop("_field")
-    _, c_index, c_u, c_vm = coarse.pop("_field")
+    coarse = levels[-2][1]
+    ids, index, u, vm = fields[-1]
+    _, c_index, c_u, c_vm = fields[0]
     preview = surface_field(levels[0][0], c_index, c_u, c_vm, split=False)  # for report pictures
 
-    def change(key: str) -> float:
-        return abs(fine[key] - coarse[key]) / max(abs(fine[key]), 1e-12)
-
-    stress_change = change("peak_von_mises_mpa")
-    disp_change = change("max_displacement_mm")
+    stress_change = _change(fine, coarse, "peak_von_mises_mpa")
+    disp_change = _change(fine, coarse, "max_displacement_mm")
     converged = stress_change <= STRESS_TOLERANCE and disp_change <= DISP_TOLERANCE
     balanced = fine["equilibrium_error"] <= EQUILIBRIUM_TOLERANCE
 

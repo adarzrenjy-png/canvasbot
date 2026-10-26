@@ -12,6 +12,7 @@ import { type Mode, type ThemeChoice, TopBar } from "./components/TopBar";
 import { type TraceEvent, TracePanel } from "./components/TracePanel";
 import { Viewport, type ViewportHandle } from "./components/Viewport";
 import { STRESS_GRADIENT } from "./lib/colormap";
+import { useAgentRun } from "./lib/useAgentRun";
 
 type Tab = "agents" | "checks" | "code" | "trace";
 const PLA_DENSITY_G_CM3 = 1.24;
@@ -151,12 +152,40 @@ export default function App() {
     [applyPart],
   );
 
+  const partRef = useRef(part);
+  partRef.current = part;
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return; // StrictMode runs effects twice in dev
     started.current = true;
-    run(() => api.sample("l_bracket"), { record: true, reason: "Loaded the starter bracket" });
-  }, [run]);
+    // The starter part only fills an empty workspace: if the agents got there first, it stays out.
+    setBusy(true);
+    api
+      .sample("l_bracket")
+      .then((payload) => {
+        if (!partRef.current) applyPart(payload, { record: true, reason: "Loaded the starter bracket" });
+      })
+      .catch((error) => setNotice(error instanceof ApiError ? error.message : String(error)))
+      .finally(() => setBusy(false));
+  }, [applyPart]);
+
+  const agents = useAgentRun("part", {
+    onTrace: log,
+    onPart: (payload) => {
+      setPart(payload);
+      if (payload.build.ok) setShown(payload.build);
+    },
+    onResult: (result) => {
+      if (!result.part) return;
+      setSelected(null);
+      applyPart(result.part, { record: true, reason: "The agents finished" });
+      if (result.fea?.ok) {
+        setFea({ result: result.fea, buildId: result.part.build.id, code: result.part.code });
+        setShowStress(true);
+      }
+    },
+    onSpend: refreshHealth,
+  });
 
   const program = part?.program ?? null;
   const features = program?.features ?? [];
@@ -199,7 +228,7 @@ export default function App() {
 
   const goTo = (index: number) => {
     const code = history.stack[index];
-    if (code === undefined || busy) return;
+    if (code === undefined || busy || agents.running) return;
     setHistory((h) => ({ ...h, index }));
     run(() => api.build(code), { record: false, reason: index < history.index ? "Undo" : "Redo" });
   };
@@ -256,7 +285,7 @@ export default function App() {
     if (!part || feaRunning) return;
     setFeaRunning(true);
     setTab("checks");
-    log({ agent: "FEA Critic", kind: "check", status: "info", title: "Meshing the part and solving its load case on two meshes" });
+    log({ agent: "FEA Critic", kind: "check", status: "info", title: "Meshing the part and solving its load case on two meshes, three if they disagree" });
     try {
       const payload = await api.analyze(part.code, part.build.ok ? part.build.id : null);
       const result = payload.fea;
@@ -325,7 +354,7 @@ export default function App() {
 
       {boardOpened && (
         <div className="mode-pane" hidden={mode !== "board"}>
-          <BoardWorkspace theme={theme} onChrome={setBoardChrome} />
+          <BoardWorkspace theme={theme} onChrome={setBoardChrome} health={health} pinging={pinging} onPing={ping} onSpend={refreshHealth} />
         </div>
       )}
 
@@ -344,7 +373,7 @@ export default function App() {
                 </button>
               )}
             </h2>
-            <ParamsPanel params={params} selectedFeature={selected} busy={busy} onCommit={commitParam} onToggleLock={toggleLock} />
+            <ParamsPanel params={params} selectedFeature={selected} busy={busy || agents.running} onCommit={commitParam} onToggleLock={toggleLock} />
           </section>
         </aside>
 
@@ -483,7 +512,17 @@ export default function App() {
             </button>
           </div>
           <div className="tab-body">
-            {tab === "agents" && <AgentPanel health={health} pinging={pinging} onPing={ping} />}
+            {tab === "agents" && (
+              <AgentPanel
+                domain="part"
+                health={health}
+                pinging={pinging}
+                onPing={ping}
+                run={agents}
+                canChange={Boolean(part?.build.ok)}
+                onSubmit={(prompt, change) => agents.start(prompt, change && part ? part.code : null)}
+              />
+            )}
             {tab === "checks" && (
               <ChecksPanel program={program} health={health} fea={fea?.result ?? null} stale={feaStale} running={feaRunning} reportHref={reportHref} onRun={runFea} />
             )}

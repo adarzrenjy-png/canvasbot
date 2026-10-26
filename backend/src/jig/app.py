@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from jig import __version__
+from jig.agents.loop import AgentDeps, run_agents
 from jig.ai.client import AIError, ModelClient
 from jig.ai.config import load_model_config
 from jig.ai.cost import CostMeter
@@ -78,6 +81,14 @@ class EnableRequest(CodeRequest):
 class LockRequest(CodeRequest):
     name: str
     locked: bool
+
+
+class AgentRequest(BaseModel):
+    domain: Literal["part", "board"] = "part"
+    prompt: str = Field(min_length=3, max_length=4000)
+    code: str | None = Field(default=None, max_length=200_000)
+    fea: bool = True
+    max_rounds: int = Field(default=3, ge=0, le=6)
 
 
 class BudgetRequest(BaseModel):
@@ -329,6 +340,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "cost_usd": result.cost_usd,
             "session": s.meter.summary(),
         }
+
+    @app.post("/api/agents/run")
+    async def agents_run(request: AgentRequest) -> StreamingResponse:
+        """Run the agent team on a request; streams one JSON event per line (NDJSON)."""
+        s = services()
+        deps = AgentDeps(
+            models=s.models,
+            builder=s.builder,
+            boards=s.boards,
+            ccx=lambda: find_ccx(settings.ccx_path),
+            part_payload=_part_payload,
+            max_rounds=request.max_rounds,
+        )
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def emit(event: dict[str, Any]) -> None:
+            await queue.put(event)
+
+        async def work() -> None:
+            try:
+                await run_agents(
+                    deps, emit, request.domain, request.prompt, request.code, fea=request.fea
+                )
+            except Exception as error:  # a crash still ends the stream with a reason
+                await queue.put({"type": "error", "message": f"Jig hit an internal error: {error}"})
+            finally:
+                await queue.put(None)
+
+        async def stream():
+            task = asyncio.create_task(work())
+            try:
+                while (event := await queue.get()) is not None:
+                    yield json.dumps(event) + "\n"
+            finally:
+                if not task.done():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+
+        return StreamingResponse(stream(), media_type="application/x-ndjson")
 
     dist = _frontend_dist()
     if dist is not None:

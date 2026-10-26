@@ -1,6 +1,8 @@
-import { Activity, Box, CircleCheck, CircleX, Code2, Cpu, Gauge, Layers, LoaderCircle, Maximize2, Network, TriangleAlert } from "lucide-react";
+import { Activity, Bot, Box, CircleCheck, CircleX, Code2, Cpu, Gauge, Layers, LoaderCircle, Maximize2, Network, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, type BoardCheck, type BoardFinding, type BoardPayload, type PartPayload } from "../api";
+import { api, ApiError, type BoardCheck, type BoardFinding, type BoardPayload, type Health, type PartPayload } from "../api";
+import { useAgentRun } from "../lib/useAgentRun";
+import { AgentPanel } from "./AgentPanel";
 import { CodeView } from "./CodeView";
 import { ParamsPanel } from "./ParamsPanel";
 import type { TraceEvent } from "./TracePanel";
@@ -17,10 +19,14 @@ export interface BoardChrome {
 interface Props {
   theme: "light" | "dark";
   onChrome: (chrome: BoardChrome) => void;
+  health: Health | null;
+  pinging: boolean;
+  onPing: () => void;
+  onSpend: () => void;
 }
 
 type View = "layout" | "schematic" | "3d";
-type Side = "checks" | "code" | "trace";
+type Side = "agents" | "checks" | "code" | "trace";
 
 function useZoom() {
   const [t, setT] = useState({ x: 0, y: 0, s: 1 });
@@ -139,14 +145,14 @@ function CheckRow({ check, onFinding }: { check: BoardCheck; onFinding: (f: Boar
   );
 }
 
-export function BoardWorkspace({ theme, onChrome }: Props) {
+export function BoardWorkspace({ theme, onChrome, health, pinging, onPing, onSpend }: Props) {
   const [board, setBoard] = useState<BoardPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [net, setNet] = useState<string | null>(null);
   const [marker, setMarker] = useState<[number, number] | null>(null);
   const [view, setView] = useState<View>("layout");
-  const [side, setSide] = useState<Side>("checks");
+  const [side, setSide] = useState<Side>("agents");
   const [layers, setLayers] = useState({ top: true, bottom: true, silk: true });
   const [model, setModel] = useState<PartPayload | null>(null);
   const [modelBusy, setModelBusy] = useState(false);
@@ -195,12 +201,34 @@ export function BoardWorkspace({ theme, onChrome }: Props) {
     [apply],
   );
 
+  const agents = useAgentRun("board", {
+    onTrace: log,
+    onBoard: (payload) => {
+      setBoard(payload);
+      setModel(null);
+      setMarker(null);
+    },
+    onResult: (result) => {
+      if (result.board) apply(result.board, "The agents finished");
+    },
+    onSpend,
+  });
+
+  const boardRef = useRef(board);
+  boardRef.current = board;
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    run(() => api.boardSample("pico_servo"), "Loaded the starter board");
-  }, [run]);
+    setBusy(true);
+    api
+      .boardSample("pico_servo")
+      .then((payload) => {
+        if (!boardRef.current) apply(payload, "Loaded the starter board");
+      })
+      .catch((error) => setNotice(error instanceof ApiError ? error.message : String(error)))
+      .finally(() => setBusy(false));
+  }, [apply]);
 
   useEffect(() => {
     if (!board) {
@@ -254,7 +282,7 @@ export function BoardWorkspace({ theme, onChrome }: Props) {
           <ParamsPanel
             params={params}
             selectedFeature={null}
-            busy={busy}
+            busy={busy || agents.running}
             onCommit={(name, value) => board && run(() => api.boardParams(board.code, { [name]: value }), `You set ${name} to ${value}`)}
             onToggleLock={(name, locked) => board && run(() => api.boardLock(board.code, name, locked), `${locked ? "Locked" : "Unlocked"} ${name}`)}
           />
@@ -416,6 +444,9 @@ export function BoardWorkspace({ theme, onChrome }: Props) {
 
       <aside className="card panel panel-right">
         <div className="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={side === "agents"} className={`tab${side === "agents" ? " is-active" : ""}`} onClick={() => setSide("agents")}>
+            <Bot size={15} /> Agents
+          </button>
           <button type="button" role="tab" aria-selected={side === "checks"} className={`tab${side === "checks" ? " is-active" : ""}`} onClick={() => setSide("checks")}>
             <Gauge size={15} /> Checks
           </button>
@@ -428,6 +459,17 @@ export function BoardWorkspace({ theme, onChrome }: Props) {
           </button>
         </div>
         <div className="tab-body">
+          {side === "agents" && (
+            <AgentPanel
+              domain="board"
+              health={health}
+              pinging={pinging}
+              onPing={onPing}
+              run={agents}
+              canChange={Boolean(board)}
+              onSubmit={(prompt, change) => agents.start(prompt, change && board ? board.code : null)}
+            />
+          )}
           {side === "checks" && board && (
             <div className="checks-panel">
               <section className="check-card">

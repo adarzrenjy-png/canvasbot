@@ -274,7 +274,91 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type AgentDomain = "part" | "board";
+
+export interface AgentCheck {
+  id: string;
+  label: string;
+  status: "pass" | "fail" | "warn" | "skip";
+  message: string;
+  line: number | null;
+  feature: string | null;
+}
+
+export interface AgentReview {
+  matches_request: boolean | null;
+  summary: string;
+  issues: { severity: "blocking" | "minor"; where: string; message: string }[];
+}
+
+export interface AgentResult {
+  type: "result";
+  domain: AgentDomain;
+  verdict: { status: "pass" | "fail" | "unverified"; errors: number; warnings: number; checks: (AgentCheck | BoardCheck)[] };
+  review: AgentReview | null;
+  plan: { name: string; summary: string; assumptions: string[] } | null;
+  rounds: number;
+  cost_usd: number;
+  part?: PartPayload;
+  fea?: FeaResult | null;
+  board?: BoardPayload;
+}
+
+export type AgentEvent =
+  | { type: "progress"; agent: string; title: string }
+  | { type: "trace"; agent: string; kind: "agent" | "check" | "system"; status: "ok" | "fail" | "info"; title: string; detail: string }
+  | { type: "call"; agent: string; model: string; provider: string; fell_back: boolean; cost_usd: number; latency_ms: number; session: SessionSummary }
+  | { type: "part"; part: PartPayload }
+  | { type: "board"; board: BoardPayload }
+  | AgentResult
+  | { type: "error"; message: string };
+
+/** Run the agent team; calls onEvent for every streamed event (one JSON object per line). */
+async function runAgents(
+  body: { domain: AgentDomain; prompt: string; code?: string | null; fea?: boolean },
+  onEvent: (event: AgentEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/agents/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) return;
+    throw new ApiError("Can't reach the Jig backend. Is it running?", 0);
+  }
+  if (!response.ok || !response.body) {
+    throw new ApiError(`The agent run could not start (HTTP ${response.status})`, response.status);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      if (signal?.aborted) return;
+      throw new ApiError("The connection to the agents dropped", 0);
+    }
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) onEvent(JSON.parse(line) as AgentEvent);
+    }
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer) as AgentEvent);
+}
+
 export const api = {
+  runAgents,
   health: () => request<Health>("/api/health"),
   sample: (name: string) => request<PartPayload>(`/api/samples/${encodeURIComponent(name)}`),
   build: (code: string) =>

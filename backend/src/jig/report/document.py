@@ -244,7 +244,7 @@ def _results(fea: dict) -> str:
     levels = fea["levels"]
     conv = fea["convergence"]
     rows = "".join(
-        f"<tr><td>{'Coarse' if i == 0 else 'Fine'}</td><td>{fmt(lv['mesh_size_mm'], 2)} mm</td>"
+        f"<tr><td>{('Coarse', 'Fine', 'Finest')[i] if len(levels) == 3 else ('Coarse', 'Fine')[i]}</td><td>{fmt(lv['mesh_size_mm'], 2)} mm</td>"
         f"<td>{lv['nodes']:,}</td><td>{lv['elements']:,}</td><td>{fmt(lv['peak_von_mises_mpa'], 2)}</td>"
         f"<td>{fmt(lv['max_displacement_mm'], 3)}</td><td>{fmt(lv['solve_s'], 1)} s</td></tr>"
         for i, lv in enumerate(levels)
@@ -267,12 +267,12 @@ def _results(fea: dict) -> str:
   <h2><span>2</span> The result</h2>
   <div class="split">
     <figure>{heatmap_picture(fea)}{scale_bar(res["peak_von_mises_mpa"])}
-      <figcaption>Von Mises stress on the surface (finer mesh). The circle marks the peak.</figcaption></figure>
+      <figcaption>Von Mises stress on the surface (finest mesh). The circle marks the peak.</figcaption></figure>
     <div>
       <ul class="checks">{checks}</ul>
       <p>The peak stress, {fmt(res["peak_von_mises_mpa"], 2)} MPa, sits at
       ({fmt(peak[0])}, {fmt(peak[1])}, {fmt(peak[2])}) mm.{clamp_note}</p>
-      <p class="note">Between the two meshes the peak stress changed {fmt(conv["stress_change"] * 100)} %
+      <p class="note">{"The first two meshes disagreed, so Jig solved a third, finer one. " if len(levels) > 2 else ""}Between the two finest meshes the peak stress changed {fmt(conv["stress_change"] * 100)} %
       (limit {fmt(conv["stress_tolerance"] * 100, 0)} %) and the largest movement
       {fmt(conv["displacement_change"] * 100, 2)} % (limit {fmt(conv["displacement_tolerance"] * 100, 0)} %):
       <strong>{"converged" if conv["converged"] else "not converged"}</strong>. The reactions at the
@@ -292,7 +292,7 @@ def _method(fea: dict) -> str:
 <section>
   <h2><span>3</span> How it was checked</h2>
   <p><strong>Finite element analysis.</strong> The CAD model is cut into small tetrahedra
-  ({fine["elements"]:,} on the finer mesh). Each one has 10 nodes, one at each corner and one on
+  ({fine["elements"]:,} on the finest mesh). Each one has 10 nodes, one at each corner and one on
   each edge, so it can bend smoothly; simpler 4-node elements are far too stiff in bending and would
   make the part look stronger than it is. CalculiX solves the stiffness equations of all of them at
   once for how far every node moves:</p>

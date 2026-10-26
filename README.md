@@ -24,8 +24,9 @@ checks and finite element analysis. Every dimension stays an editable parameter.
 | Milestone | Target | State |
 |---|---|---|
 | Cross-platform skeleton, CI on macOS and Windows, a build123d part in the viewport, Meta API client | Oct 27 | **Done** |
-| Planner, Modeler, and Verifier loop from text; editable feature tree; Code tab (one-way) | Oct 28–29 | Next. The feature tree, parameter edits, and read-only code view already work. |
-| FEA Critic (CalculiX), stress heatmap, Fixer loop, two-way Code tab | Oct 30–31 | FEA engine and engineering report done early; UI and Fixer next |
+| Planner, Modeler, and Verifier loop from text; editable feature tree; Code tab (one-way) | Oct 28–29 | **Done** (loop tested against a mocked Meta API; needs a real key run) |
+| FEA Critic (CalculiX), stress heatmap, Fixer loop, two-way Code tab | Oct 30–31 | FEA, heatmap, report and Fixer loop done; two-way code editing next |
+| Board mode: part library, autorouter, DRC/ERC, Gerbers, board agents | Added | **Done** |
 | Optimize mode; photo input with SAM and sketch vision; voice input | Nov 1–2 | Planned |
 | Muse Spark Open verifier on Baseten, polish, onboarding, report export | Nov 3 | Planned |
 
@@ -47,8 +48,9 @@ What works today:
 - CalculiX detection. Without `ccx`, Jig runs with FEA switched off and tells you how to install it.
 - **Real FEA.** gmsh meshes the part in 10-node tetrahedra and CalculiX solves the load case written
   in the part's own `ANALYSIS` block: material, fixtures (fixed or sliding supports) and forces,
-  with faces picked by the feature that made them. Every run is solved on two meshes and only
-  trusted if the peak stress settles (under 10 % change) and the reactions balance the loads. The
+  with faces picked by the feature that made them. Every run is solved on two meshes (a third, finer one
+  if they disagree) and only trusted if the peak stress settles (under 10 % change) and the
+  reactions balance the loads. The
   safety factor is computed by code from those numbers.
 - **The solver is checked against theory.** A test runs a cantilever beam through the whole
   pipeline: tip deflection within 0.7 % and bending stress within 1 % of beam theory.
@@ -56,6 +58,13 @@ What works today:
   must survive with a diagram, the stress heatmap, mesh convergence and equilibrium evidence, the
   method with its equations in plain words, parameters, assumptions with their basis, an explicit
   "Not checked" list, and the exact source code. One self-contained HTML file that prints to PDF.
+- **The agent team.** Describe a part or a board and a Planner, Modeler, Verifier and Fixer
+  on Meta's models build it, while Jig builds, measures and load-tests every attempt. Failures
+  (a feature that will not build, a safety factor under 2, an overlapping part, a DRC error) go
+  back to the Fixer with the line, the feature and where the stress peaks, until it passes or
+  runs out of rounds. Models never decide PASS: code does. Locked parameters stay locked, and a
+  fix that weakens the loads or the safety margin is rejected. You watch every agent work, with
+  the model that answered and what it cost, and every step lands in the Trace.
 - **Board mode: real circuit boards.** A board is a program too: parameters, parts from a
   built-in library (IPC-7351 footprints, pin types, voltage and current ratings, LCSC numbers),
   and nets with their voltage and current. Jig places the parts you specify, routes two layers
