@@ -1069,3 +1069,264 @@ p {
     flex-direction: column;
   }
 }
+
+/* ---------- checks / FEA ---------- */
+
+.checks-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.check-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.check-card header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.check-card h3 {
+  font-size: var(--text-sm);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.check-card .button {
+  align-self: flex-start;
+  text-decoration: none;
+}
+
+.check-card.is-warn {
+  background: var(--warning-soft);
+}
+
+.check-card .hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.load-case {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
+.load-case li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.load-case li > span:not(.swatch) {
+  color: var(--text-muted);
+  min-width: 70px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.swatch.fix {
+  background: #1f6feb;
+}
+
+.swatch.load {
+  background: #e8590c;
+}
+
+.verdict-card.is-ok {
+  background: var(--success-soft);
+}
+
+.verdict-card.is-fail {
+  background: var(--danger-soft);
+}
+
+.verdict-card.is-warn {
+  background: var(--warning-soft);
+}
+
+.verdict-card.is-stale {
+  opacity: 0.7;
+}
+
+.verdict {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.verdict-label {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.is-ok .verdict-label {
+  color: var(--success);
+}
+
+.is-fail .verdict-label {
+  color: var(--danger);
+}
+
+.is-warn .verdict-label {
+  color: var(--warning);
+}
+
+.verdict-sf {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict-sf small {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
+.result-list li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.result-list li svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.result-list li.ok svg {
+  color: var(--success);
+}
+
+.result-list li.bad svg {
+  color: var(--danger);
+}
+
+.fea-numbers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.fea-numbers div {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.fea-numbers dt {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.fea-numbers dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict-badge {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-2);
+  cursor: pointer;
+  font: inherit;
+  animation: pop-in var(--dur-panel) var(--ease-out);
+}
+
+.verdict-badge strong {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.verdict-badge span {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict-badge.is-ok {
+  background: var(--success);
+  color: #fff;
+}
+
+.verdict-badge.is-fail {
+  background: var(--danger);
+  color: #fff;
+}
+
+.verdict-badge.is-warn {
+  background: var(--warning);
+  color: #fff;
+}
+
+.stress-legend {
+  position: absolute;
+  right: var(--space-3);
+  bottom: 76px; /* above the stats tiles */
+  width: 220px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.legend-title {
+  font-weight: 600;
+}
+
+.legend-bar {
+  height: 10px;
+  border-radius: 3px;
+  margin: 4px 0 2px;
+}
+
+.legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}

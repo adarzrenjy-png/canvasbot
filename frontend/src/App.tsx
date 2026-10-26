@@ -1,15 +1,17 @@
-import { Code2, LoaderCircle, Maximize2, MessageSquare, SquareDashed, TriangleAlert, Activity, CircleCheck } from "lucide-react";
+import { Activity, CircleCheck, Code2, Flame, Gauge, LoaderCircle, Maximize2, MessageSquare, SquareDashed, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, type Build, type Health, type PartPayload } from "./api";
+import { api, ApiError, type Build, type FeaResult, type Health, type PartPayload } from "./api";
 import { AgentPanel } from "./components/AgentPanel";
+import { ChecksPanel, VERDICT } from "./components/ChecksPanel";
 import { CodeView } from "./components/CodeView";
 import { FeatureTree } from "./components/FeatureTree";
 import { ParamsPanel } from "./components/ParamsPanel";
 import { type ThemeChoice, TopBar } from "./components/TopBar";
 import { type TraceEvent, TracePanel } from "./components/TracePanel";
 import { Viewport, type ViewportHandle } from "./components/Viewport";
+import { STRESS_GRADIENT } from "./lib/colormap";
 
-type Tab = "agents" | "code" | "trace";
+type Tab = "agents" | "checks" | "code" | "trace";
 const PLA_DENSITY_G_CM3 = 1.24;
 
 function readTheme(): ThemeChoice {
@@ -69,6 +71,9 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [pinging, setPinging] = useState(false);
   const [trace, setTrace] = useState<TraceEvent[]>([]);
+  const [fea, setFea] = useState<{ result: FeaResult; buildId: string; code: string } | null>(null);
+  const [feaRunning, setFeaRunning] = useState(false);
+  const [showStress, setShowStress] = useState(false);
   const traceId = useRef(0);
   const viewport = useRef<ViewportHandle>(null);
 
@@ -226,6 +231,44 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  const feaStale = fea !== null && part !== null && fea.code !== part.code;
+  const feaCurrent = fea && !feaStale && fea.result.ok ? fea.result : null;
+
+  const runFea = async () => {
+    if (!part || feaRunning) return;
+    setFeaRunning(true);
+    setTab("checks");
+    log({ agent: "FEA Critic", kind: "check", status: "info", title: "Meshing the part and solving its load case on two meshes" });
+    try {
+      const payload = await api.analyze(part.code, part.build.ok ? part.build.id : null);
+      const result = payload.fea;
+      setFea({ result, buildId: payload.build.id, code: payload.code });
+      if (result.ok && result.result) {
+        const verdict = VERDICT[result.status]?.label ?? result.status;
+        const sf = result.checks?.find((c) => c.id === "safety_factor");
+        const fine = result.levels?.at(-1);
+        log({
+          agent: "FEA Critic",
+          kind: "check",
+          status: result.status === "pass" ? "ok" : "fail",
+          title: `${verdict}: safety factor ${result.safety_factor!.toFixed(2)} (needs ${sf?.limit.toFixed(1)})`,
+          detail: `Peak ${result.result.peak_von_mises_mpa.toFixed(1)} MPa of ${result.material!.allowable_mpa} MPa allowable, max movement ${result.result.max_displacement_mm.toFixed(2)} mm. ${fine?.elements.toLocaleString()} elements; stress moved ${((result.convergence?.stress_change ?? 0) * 100).toFixed(1)} % between meshes; forces balance.`,
+        });
+        setShowStress(true);
+      } else {
+        log({ agent: "FEA Critic", kind: "check", status: "fail", title: "FEA could not run", detail: result.error });
+      }
+    } catch (error) {
+      log({ agent: "FEA Critic", kind: "check", status: "fail", title: "FEA request failed", detail: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setFeaRunning(false);
+    }
+  };
+
+  const reportHref = part?.build.ok
+    ? api.reportUrl(feaCurrent && fea ? fea.buildId : part.build.id)
+    : null;
+
   const downloads = useMemo(() => {
     const build = part?.build;
     if (!build?.ok) return [];
@@ -233,12 +276,14 @@ export default function App() {
       { label: "STEP", href: api.downloadUrl(build.id, "step"), hint: "For any CAD tool" },
       { label: "STL", href: api.downloadUrl(build.id, "stl"), hint: "For slicers" },
       { label: "Python (.py)", href: api.downloadUrl(build.id, "py"), hint: "Runs on its own with build123d" },
+      ...(reportHref ? [{ label: "Engineering report", href: reportHref, hint: feaCurrent ? "With FEA results" : "Run FEA first for results" }] : []),
     ];
-  }, [part]);
+  }, [part, reportHref, feaCurrent]);
 
   const failed = part && !part.build.ok ? part.build.error : null;
   const stats = shown?.stats;
   const selectedFeature = features.find((f) => f.id === selected) ?? null;
+  const material = program?.material ?? null;
 
   return (
     <div className="app">
@@ -282,6 +327,9 @@ export default function App() {
             selectedFeature={selected}
             hoveredFeature={hovered}
             showEdges={showEdges}
+            stressField={feaCurrent?.field ?? null}
+            stressMax={feaCurrent?.result?.peak_von_mises_mpa ?? 0}
+            showStress={showStress && feaCurrent !== null}
             onPickFeature={setSelected}
             onHoverFeature={setHovered}
           />
@@ -292,7 +340,37 @@ export default function App() {
             <button type="button" className={`icon-button floating${showEdges ? " is-on" : ""}`} onClick={() => setShowEdges((v) => !v)} data-tip="Show edges" aria-pressed={showEdges} aria-label="Show edges">
               <SquareDashed size={16} />
             </button>
+            <button
+              type="button"
+              className={`icon-button floating${showStress && feaCurrent ? " is-on" : ""}`}
+              onClick={() => setShowStress((v) => !v)}
+              disabled={!feaCurrent}
+              data-tip={feaCurrent ? "Show the stress heatmap" : "Run FEA to see stress"}
+              aria-pressed={showStress}
+              aria-label="Show stress"
+            >
+              <Flame size={16} />
+            </button>
           </div>
+
+          {feaCurrent && VERDICT[feaCurrent.status] && (
+            <button type="button" className={`verdict-badge is-${VERDICT[feaCurrent.status].tone}`} onClick={() => setTab("checks")} data-tip="From FEA: safety factor = allowable stress ÷ peak stress. Click for the evidence.">
+              <strong>{VERDICT[feaCurrent.status].label}</strong>
+              <span>safety factor {feaCurrent.safety_factor!.toFixed(1)}</span>
+            </button>
+          )}
+
+          {showStress && feaCurrent?.result && (
+            <div className="stress-legend" aria-label="Stress scale">
+              <span className="legend-title">von Mises stress (MPa)</span>
+              <div className="legend-bar" style={{ background: STRESS_GRADIENT }} />
+              <div className="legend-ticks">
+                <span>0</span>
+                <span>{(feaCurrent.result.peak_von_mises_mpa / 2).toFixed(1)}</span>
+                <span>{feaCurrent.result.peak_von_mises_mpa.toFixed(1)}</span>
+              </div>
+            </div>
+          )}
 
           <div className="viewport-status">
             {busy ? (
@@ -343,9 +421,9 @@ export default function App() {
                 <dt>Volume</dt>
                 <dd>{fmt(stats.volume_mm3 / 1000, 2)} cm³</dd>
               </div>
-              <div data-tip="Estimated weight if printed solid in PLA (1.24 g/cm³). Infill makes real prints lighter.">
-                <dt>Mass (PLA)</dt>
-                <dd>{fmt((stats.volume_mm3 / 1000) * PLA_DENSITY_G_CM3, 1)} g</dd>
+              <div data-tip={material ? `Weight if made solid in ${material.name} (${material.density_g_cm3} g/cm³).` : "Estimated weight if printed solid in PLA (1.24 g/cm³). Set a material in the load case."}>
+                <dt>Mass ({material ? material.name.replace(/ \(.*\)$/, "") : "PLA"})</dt>
+                <dd>{fmt((stats.volume_mm3 / 1000) * (material?.density_g_cm3 ?? PLA_DENSITY_G_CM3), 1)} g</dd>
               </div>
               <div data-tip="The smallest box the part fits in, X × Y × Z.">
                 <dt>Size</dt>
@@ -364,6 +442,9 @@ export default function App() {
             <button type="button" role="tab" aria-selected={tab === "agents"} className={`tab${tab === "agents" ? " is-active" : ""}`} onClick={() => setTab("agents")}>
               <MessageSquare size={15} /> Agents
             </button>
+            <button type="button" role="tab" aria-selected={tab === "checks"} className={`tab${tab === "checks" ? " is-active" : ""}`} onClick={() => setTab("checks")}>
+              <Gauge size={15} /> Checks
+            </button>
             <button type="button" role="tab" aria-selected={tab === "code"} className={`tab${tab === "code" ? " is-active" : ""}`} onClick={() => setTab("code")}>
               <Code2 size={15} /> Code
             </button>
@@ -374,6 +455,9 @@ export default function App() {
           </div>
           <div className="tab-body">
             {tab === "agents" && <AgentPanel health={health} pinging={pinging} onPing={ping} />}
+            {tab === "checks" && (
+              <ChecksPanel program={program} health={health} fea={fea?.result ?? null} stale={feaStale} running={feaRunning} reportHref={reportHref} onRun={runFea} />
+            )}
             {tab === "code" && part && (
               <CodeView code={part.code} features={features} selectedFeature={selected} errorLine={failed?.line ?? null} onSelectFeature={setSelected} />
             )}

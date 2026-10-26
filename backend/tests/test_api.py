@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -54,3 +55,32 @@ def test_ping_without_a_key_explains_what_to_do(client: TestClient) -> None:
 
 def test_download_rejects_path_tricks(client: TestClient) -> None:
     assert client.get("/api/builds/..%2F..%2Fetc/download/step").status_code == 404
+
+
+def test_program_payload_carries_the_material(client: TestClient) -> None:
+    program = client.get("/api/samples/l_bracket").json()["program"]
+    assert program["material"]["id"] == "petg"
+    assert program["material"]["density_g_cm3"] == pytest.approx(1.27)
+
+
+def test_report_without_fea_is_served_as_html(client: TestClient) -> None:
+    build_id = client.get("/api/samples/l_bracket").json()["build"]["id"]
+    response = client.get(f"/api/builds/{build_id}/report")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "NOT ANALYSED" in response.text
+    download = client.get(f"/api/builds/{build_id}/report?download=true")
+    assert "attachment" in download.headers["content-disposition"]
+
+
+@pytest.mark.skipif(shutil.which("ccx") is None, reason="needs CalculiX")
+def test_analyze_then_report_with_results(client: TestClient) -> None:
+    pytest.importorskip("gmsh")
+    sample = client.get("/api/samples/l_bracket").json()
+    body = client.post(
+        "/api/parts/analyze", json={"code": sample["code"], "build_id": sample["build"]["id"]}
+    ).json()
+    assert body["build"]["id"] == sample["build"]["id"]  # reused, not rebuilt
+    assert body["fea"]["status"] == "fail"
+    report = client.get(f"/api/builds/{body['build']['id']}/report").text
+    assert ">FAIL<" in report and "safety factor" in report.lower()

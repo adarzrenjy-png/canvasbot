@@ -1,8 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { MeshPayload } from "../api";
-import { type DecodedMesh, decodeMesh, faceOfTriangle } from "../lib/mesh";
+import type { FeaField, MeshPayload } from "../api";
+import { stressRgb } from "../lib/colormap";
+import { type DecodedMesh, decodeBytes, decodeMesh, faceOfTriangle } from "../lib/mesh";
 
 export interface ViewportHandle {
   fit: () => void;
@@ -14,6 +15,10 @@ interface Props {
   selectedFeature: string | null;
   hoveredFeature: string | null;
   showEdges: boolean;
+  /** FEA surface result; shown instead of the part while `showStress` is on. */
+  stressField: FeaField | null;
+  stressMax: number;
+  showStress: boolean;
   onPickFeature: (feature: string | null) => void;
   onHoverFeature: (feature: string | null) => void;
 }
@@ -27,6 +32,7 @@ interface Scene {
   part: THREE.Mesh | null;
   edges: THREE.LineSegments | null;
   decoded: DecodedMesh | null;
+  stress: THREE.Mesh | null;
 }
 
 function cssColor(name: string): THREE.Color {
@@ -73,7 +79,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
 
     const grid = makeGrid(200);
     scene.add(grid);
-    sceneRef.current = { renderer, scene, camera, controls, grid, part: null, edges: null, decoded: null };
+    sceneRef.current = { renderer, scene, camera, controls, grid, part: null, edges: null, decoded: null, stress: null };
 
     const resize = () => {
       const { clientWidth: w, clientHeight: h } = host;
@@ -100,7 +106,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
     let downAt: [number, number] | null = null;
     const pick = (event: PointerEvent): string | null | undefined => {
       const s = sceneRef.current;
-      if (!s?.part || !s.decoded) return undefined;
+      if (!s?.part || !s.decoded || !s.part.visible) return undefined;
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(pointer, camera);
@@ -231,6 +237,46 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
     }
   };
   useEffect(paint, [props.selectedFeature, props.hoveredFeature, props.theme, props.showEdges]);
+
+  // The stress heatmap: its own mesh (the FEA surface), coloured by von Mises stress.
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    if (s.stress) {
+      s.scene.remove(s.stress);
+      s.stress.geometry.dispose();
+      (s.stress.material as THREE.Material).dispose();
+      s.stress = null;
+    }
+    const field = props.stressField;
+    if (!field) return;
+    const positions = new Float32Array(decodeBytes(field.positions));
+    const indices = new Uint32Array(decodeBytes(field.indices));
+    const values = new Float32Array(decodeBytes(field.von_mises));
+    const colors = new Float32Array(positions.length);
+    const max = props.stressMax > 0 ? props.stressMax : values.reduce((a, b) => Math.max(a, b), 0);
+    values.forEach((v, i) => colors.set(stressRgb(v / max), i * 3));
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    geometry.computeVertexNormals();
+    s.stress = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: THREE.DoubleSide }),
+    );
+    s.scene.add(s.stress);
+    s.stress.visible = props.showStress;
+  }, [props.stressField, props.stressMax]);
+
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+    const stress = props.showStress && s.stress !== null;
+    if (s.stress) s.stress.visible = stress;
+    if (s.part) s.part.visible = !stress;
+    if (s.edges) s.edges.visible = !stress && props.showEdges;
+  }, [props.showStress, props.stressField, props.showEdges, props.mesh]);
 
   useEffect(() => {
     const s = sceneRef.current;

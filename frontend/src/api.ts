@@ -20,11 +20,15 @@ export interface Feature {
   line_start: number;
   line_end: number;
   params: string[];
+  description: string;
+  enabled: boolean;
 }
 
 export interface Program {
   params: Param[];
   features: Feature[];
+  analysis: Record<string, unknown> | null;
+  material: { id: string; name: string; density_g_cm3: number; allowable_mpa: number } | null;
 }
 
 export interface BuildError {
@@ -62,7 +66,7 @@ export interface Build {
   id: string;
   ok: boolean;
   elapsed_ms: number;
-  features: { id: string; ok: boolean; ms: number }[];
+  features: { id: string; ok: boolean; ms: number; skipped?: boolean }[];
   error?: BuildError;
   stats?: BuildStats;
   mesh?: MeshPayload;
@@ -75,6 +79,55 @@ export interface PartPayload {
   program: Program | null;
   program_error: { message: string; line: number | null } | null;
   build: Build;
+}
+
+export interface FeaField {
+  positions: string;
+  indices: string;
+  von_mises: string;
+  displacement: string;
+  triangles: number;
+}
+
+export interface FeaCheck {
+  id: string;
+  label: string;
+  value: number;
+  limit: number;
+  pass: boolean;
+  detail: string;
+}
+
+export interface FeaLevel {
+  mesh_size_mm: number;
+  nodes: number;
+  elements: number;
+  solve_s: number;
+  max_displacement_mm: number;
+  peak_von_mises_mpa: number;
+}
+
+export type FeaStatus = "pass" | "fail" | "unconverged" | "invalid" | "error" | "unavailable" | "no_load_case";
+
+export interface FeaResult {
+  ok: boolean;
+  status: FeaStatus;
+  error?: string;
+  safety_factor?: number;
+  checks?: FeaCheck[];
+  material?: { id: string; name: string; allowable_mpa: number; allowable_basis: string };
+  fixtures?: { name: string; type: string; selector: string; faces: number[] }[];
+  loads?: { name: string; selector: string; force_n: number[]; faces: number[] }[];
+  levels?: FeaLevel[];
+  convergence?: { stress_change: number; displacement_change: number; converged: boolean };
+  equilibrium?: { error: number; ok: boolean };
+  result?: {
+    peak_von_mises_mpa: number;
+    peak_at: number[];
+    raw_peak_von_mises_mpa: number;
+    max_displacement_mm: number;
+  };
+  field?: FeaField;
 }
 
 export interface SessionSummary {
@@ -159,6 +212,12 @@ export const api = {
       body: JSON.stringify({ code, name, locked }),
     }),
   ping: () => request<PingResult>("/api/ai/ping", { method: "POST" }),
+  analyze: (code: string, buildId: string | null) =>
+    request<PartPayload & { fea: FeaResult }>("/api/parts/analyze", {
+      method: "POST",
+      body: JSON.stringify({ code, build_id: buildId }),
+    }),
+  reportUrl: (buildId: string) => `/api/builds/${buildId}/report`,
   downloadUrl: (buildId: string, kind: "step" | "stl" | "py") =>
     `/api/builds/${buildId}/download/${kind}`,
 };

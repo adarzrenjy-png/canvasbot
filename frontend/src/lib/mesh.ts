@@ -1,5 +1,9 @@
 import type { MeshFace, MeshPayload } from "../api";
 
+export function decodeBytes(b64: string): ArrayBuffer {
+  return bytes(b64);
+}
+
 function bytes(b64: string): ArrayBuffer {
   const raw = atob(b64);
   const out = new Uint8Array(raw.length);

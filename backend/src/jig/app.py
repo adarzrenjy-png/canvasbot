@@ -22,6 +22,7 @@ from jig.cad.builder import Builder, BuildResult
 from jig.cad.program import ProgramError, parse_program, set_param_flags, set_params
 from jig.cad.samples import SAMPLES
 from jig.fea.ccx import find_ccx
+from jig.fea.materials import MATERIALS
 from jig.fea.service import analyze_build
 from jig.report.document import build_report
 from jig.settings import Settings, get_settings
@@ -65,9 +66,12 @@ class BudgetRequest(BaseModel):
 
 def _program_payload(code: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     try:
-        return parse_program(code).to_dict(), None
+        program = parse_program(code).to_dict()
     except ProgramError as error:
         return None, {"message": str(error), "line": error.line}
+    material_id = (program.get("analysis") or {}).get("material")
+    program["material"] = MATERIALS[material_id].to_dict() if material_id in MATERIALS else None
+    return program, None
 
 
 def _part_payload(code: str, result: BuildResult) -> dict[str, Any]:
