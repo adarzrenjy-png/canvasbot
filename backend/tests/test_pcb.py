@@ -168,3 +168,82 @@ def test_overlapping_parts_are_caught() -> None:
     result = run_checks(board, route_board(board))
     placement = next(c for c in result["checks"] if c["id"] == "placement")
     assert any("R1" in f["message"] and "R2" in f["message"] for f in placement["findings"])
+
+
+# ---------------------------------------------------------------- outputs
+
+
+def test_gerbers_parse_in_an_independent_reader_and_match_the_board(routed) -> None:
+    from pygerber.gerberx3.api.v2 import GerberFile
+
+    from jig.pcb.fab import fab_files
+
+    board, routing = routed
+    files = fab_files(board, routing, "pico")
+    gerbers = [
+        n for n in files if n.endswith((".gtl", ".gbl", ".gts", ".gbs", ".gtp", ".gto", ".gm1"))
+    ]
+    assert len(gerbers) == 7
+    for name in gerbers:
+        info = GerberFile.from_str(files[name]).parse().get_info()
+        assert float(info.min_x_mm) >= -0.1 and float(info.max_x_mm) <= board.width + 0.1, name
+        assert float(info.min_y_mm) >= -0.1 and float(info.max_y_mm) <= board.height + 0.1, name
+    edge = GerberFile.from_str(files["pico-Edge_Cuts.gm1"]).parse().get_info()
+    assert float(edge.width_mm) == pytest.approx(board.width + 0.1, abs=0.01)  # 0.1 mm pen
+    assert float(edge.height_mm) == pytest.approx(board.height + 0.1, abs=0.01)
+
+
+def test_drill_files_hold_every_hole(routed) -> None:
+    from jig.pcb.fab import fab_files
+
+    board, routing = routed
+    drill = fab_files(board, routing, "pico")["pico-PTH.drl"]
+    hits = [line for line in drill.splitlines() if line.startswith("X")]
+    tht = [p for p in board.pads() if p.through_hole]
+    assert len(hits) == len(tht) + len(routing.vias)
+    assert "METRIC" in drill and drill.rstrip().endswith("M30")
+
+
+def test_bom_groups_parts_and_skips_mechanical(routed) -> None:
+    from jig.pcb.fab import bom_rows
+
+    board, _ = routed
+    rows = {r["Designator"]: r for r in bom_rows(board)}
+    assert rows["R1,R2"]["Quantity"] == 2 and rows["R1,R2"]["Comment"] == "330"
+    assert rows["D1"]["LCSC Part #"] == "C8678"
+    assert not any(d.startswith("H") for d in rows)  # mounting holes are not assembled
+
+
+def test_schematic_labels_every_connected_pin(routed) -> None:
+    from jig.pcb.schematic import schematic_svg
+
+    board, _ = routed
+    svg = schematic_svg(board)
+    for net in board.nets:
+        assert f'data-net="{net}"' in svg
+    assert "34 unused pins not shown" in svg  # the Pico shows only what is used
+
+
+def test_board_3d_builds_as_a_part(builder) -> None:
+    from jig.pcb.model3d import board_part_program
+
+    board = parse_board(PICO_SERVO)
+    result = builder.build(board_part_program(board))
+    assert result.ok, result.data.get("error")
+    size = result.data["stats"]["bbox"]["size"]
+    assert size[0] == pytest.approx(72) and size[1] == pytest.approx(45)
+    assert size[2] == pytest.approx(1.6 + 12.0)  # the Pico on headers is the tallest part
+
+
+def test_board_service_and_report(tmp_path) -> None:
+    from jig.pcb.service import BoardService
+    from jig.report.board_document import build_board_report
+
+    service = BoardService(tmp_path)
+    payload = service.design(PICO_SERVO)
+    assert payload["checks"]["status"] == "pass"
+    assert service.path_for(payload["id"], "fab.zip") is not None
+    assert service.load(payload["id"])["name"] == "Pico servo board"
+    html = build_board_report(payload)
+    assert ">PASS<" in html and "IPC-2221" in html and "Not checked" in html
+    assert "1.50 A in 0.55 mm" in html  # the busiest VIN branch, explained
