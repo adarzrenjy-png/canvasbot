@@ -131,6 +131,78 @@ export interface FeaResult {
   field?: FeaField;
 }
 
+export interface BoardFinding {
+  check: string;
+  severity: "error" | "warning";
+  message: string;
+  at: [number, number] | null;
+  nets: string[];
+}
+
+export interface BoardCheck {
+  id: string;
+  label: string;
+  kind: "drc" | "erc";
+  status: "pass" | "fail" | "warn";
+  looked_at: number;
+  findings: BoardFinding[];
+}
+
+export interface BoardNet {
+  name: string;
+  kind: "signal" | "power" | "ground";
+  voltage: number | null;
+  current: number;
+  pins: string[];
+  pour: string | null;
+  ipc_width_mm: number;
+  widest_mm: number | null;
+  busiest: { current: number; width: number; sized_by: string; capacity: number } | null;
+  length_mm: number;
+  vias: number;
+}
+
+export interface BoardPart {
+  ref: string;
+  part: string;
+  name: string;
+  value: string;
+  category: string;
+  x: number;
+  y: number;
+  rotation: number;
+  footprint: string;
+  lcsc: string | null;
+  label: string;
+}
+
+export interface BoardPayload {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  params: Param[];
+  board: { width: number; height: number; thickness: number; layers: number; copper_oz: number };
+  rules: Record<string, number>;
+  parts: BoardPart[];
+  nets: BoardNet[];
+  routing: {
+    tracks: number;
+    vias: number;
+    length_mm: number;
+    passes: number;
+    seconds: number;
+    unrouted: { net: string; from: string; to: string }[];
+    routed_nets: number;
+    nets: number;
+  };
+  checks: { status: "pass" | "fail"; errors: number; warnings: number; checks: BoardCheck[] };
+  svg: string;
+  schematic: string;
+  bom: Record<string, string | number>[];
+  fab_files: string[];
+}
+
 export interface SessionSummary {
   spent_usd: number;
   budget_usd: number;
@@ -188,7 +260,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = response.statusText;
     try {
       const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      detail =
+        typeof body.detail === "string"
+          ? body.detail
+          : typeof body.detail?.message === "string"
+            ? `${body.detail.message}${body.detail.line ? ` (line ${body.detail.line})` : ""}`
+            : JSON.stringify(body.detail);
     } catch {
       /* keep statusText */
     }
@@ -226,6 +303,17 @@ export const api = {
       body: JSON.stringify({ code, build_id: buildId }),
     }),
   reportUrl: (buildId: string) => `/api/builds/${buildId}/report`,
+  boardSample: (name: string) => request<BoardPayload>(`/api/boards/samples/${encodeURIComponent(name)}`),
+  designBoard: (code: string) =>
+    request<BoardPayload>("/api/boards/design", { method: "POST", body: JSON.stringify({ code }) }),
+  boardParams: (code: string, updates: Record<string, number>) =>
+    request<BoardPayload>("/api/boards/params", { method: "POST", body: JSON.stringify({ code, updates }) }),
+  boardLock: (code: string, name: string, locked: boolean) =>
+    request<BoardPayload>("/api/boards/lock", { method: "POST", body: JSON.stringify({ code, name, locked }) }),
+  boardModel: (boardId: string) => request<PartPayload>(`/api/boards/${boardId}/model3d`, { method: "POST" }),
+  boardFabUrl: (boardId: string) => `/api/boards/${boardId}/fab.zip`,
+  boardReportUrl: (boardId: string) => `/api/boards/${boardId}/report`,
+  boardSourceUrl: (boardId: string) => `/api/boards/${boardId}/board.py`,
   downloadUrl: (buildId: string, kind: "step" | "stl" | "py") =>
     `/api/builds/${buildId}/download/${kind}`,
 };

@@ -3,11 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, type Build, type FeaResult, type Health, type PartPayload } from "./api";
 import { AgentPanel } from "./components/AgentPanel";
 import { BlocksView } from "./components/BlocksView";
+import { type BoardChrome, BoardWorkspace } from "./components/BoardWorkspace";
 import { ChecksPanel, VERDICT } from "./components/ChecksPanel";
 import { CodeView } from "./components/CodeView";
 import { FeatureTree } from "./components/FeatureTree";
 import { ParamsPanel } from "./components/ParamsPanel";
-import { type ThemeChoice, TopBar } from "./components/TopBar";
+import { type Mode, type ThemeChoice, TopBar } from "./components/TopBar";
 import { type TraceEvent, TracePanel } from "./components/TracePanel";
 import { Viewport, type ViewportHandle } from "./components/Viewport";
 import { STRESS_GRADIENT } from "./lib/colormap";
@@ -46,6 +47,9 @@ const fmt = (n: number, digits = 1) => n.toLocaleString(undefined, { maximumFrac
 
 export default function App() {
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>(readTheme);
+  const [mode, setMode] = useState<Mode>("part");
+  const [boardOpened, setBoardOpened] = useState(false);
+  const [boardChrome, setBoardChrome] = useState<BoardChrome>({ title: "Loading board…", downloads: [] });
   const theme = useResolvedTheme(themeChoice);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -227,6 +231,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement).closest("input, textarea, [contenteditable]");
       const mod = e.metaKey || e.ctrlKey;
+      if (mode !== "part") return;
       if (mod && e.key.toLowerCase() === "z" && !typing) {
         e.preventDefault();
         if (e.shiftKey) canRedo && goTo(history.index + 1);
@@ -301,19 +306,30 @@ export default function App() {
   return (
     <div className="app">
       <TopBar
-        title={part ? partTitle(part.code) : "Loading…"}
+        mode={mode}
+        onMode={(next) => {
+          setMode(next);
+          if (next === "board") setBoardOpened(true);
+        }}
+        title={mode === "board" ? boardChrome.title : part ? partTitle(part.code) : "Loading…"}
         health={health}
         backendDown={backendDown}
         theme={themeChoice}
         onTheme={chooseTheme}
-        canUndo={canUndo}
-        canRedo={canRedo}
+        canUndo={mode === "part" && canUndo}
+        canRedo={mode === "part" && canRedo}
         onUndo={() => goTo(history.index - 1)}
         onRedo={() => goTo(history.index + 1)}
-        downloads={downloads}
+        downloads={mode === "board" ? boardChrome.downloads : downloads}
       />
 
-      <main className="workspace">
+      {boardOpened && (
+        <div className="mode-pane" hidden={mode !== "board"}>
+          <BoardWorkspace theme={theme} onChrome={setBoardChrome} />
+        </div>
+      )}
+
+      <main className="workspace" hidden={mode !== "part"}>
         <aside className="card panel panel-left">
           <section className="panel-section">
             <h2 className="section-title">Features</h2>

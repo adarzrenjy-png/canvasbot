@@ -106,3 +106,33 @@ def test_blocks_can_be_switched_off_and_reordered(client: TestClient) -> None:
         "/api/parts/features/order", json={"code": sample["code"], "order": order[:2]}
     )
     assert bad.status_code == 422
+
+
+def test_board_design_edit_and_downloads(client: TestClient) -> None:
+    board = client.get("/api/boards/samples/pico_servo").json()
+    assert board["checks"]["status"] == "pass"
+    assert board["svg"].startswith("<svg") and board["schematic"].startswith("<svg")
+
+    wider = client.post(
+        "/api/boards/params", json={"code": board["code"], "updates": {"BOARD_W": 80}}
+    ).json()
+    assert wider["board"]["width"] == 80 and "BOARD_W = 80.0" in wider["code"]
+
+    fab = client.get(f"/api/boards/{wider['id']}/fab.zip")
+    assert fab.status_code == 200 and fab.content[:2] == b"PK"
+    report = client.get(f"/api/boards/{wider['id']}/report")
+    assert report.status_code == 200 and "board report" in report.text.lower()
+
+
+def test_bad_board_program_reports_the_line(client: TestClient) -> None:
+    code = client.get("/api/boards/samples/pico_servo").json()["code"]
+    response = client.post("/api/boards/design", json={"code": code.replace("U1.VSYS", "U1.NOPE")})
+    assert response.status_code == 422
+    assert "NOPE" in response.json()["detail"]["message"]
+
+
+def test_board_3d_model_builds_for_the_viewport(client: TestClient) -> None:
+    board = client.get("/api/boards/samples/pico_servo").json()
+    part = client.post(f"/api/boards/{board['id']}/model3d").json()
+    assert part["build"]["ok"]
+    assert part["build"]["stats"]["bbox"]["size"][0] == pytest.approx(72)

@@ -156,6 +156,16 @@ def test_unpowered_input_and_overvoltage_are_caught() -> None:
     voltage = next(c for c in erc["checks"] if c["id"] == "voltage")
     assert voltage["status"] == "fail"
     assert any("U1" in f["message"] and "5.5 V" in f["message"] for f in voltage["findings"])
+    u1 = hot.parts["U1"]
+    assert all(f["at"] == (u1.x, u1.y) for f in voltage["findings"] if "U1" in f["message"])
+
+
+def test_erc_findings_point_at_the_pin(routed) -> None:
+    board, routing = routed
+    open_pins = next(c for c in run_checks(board, routing)["checks"] if c["id"] == "open_pins")
+    finding = next(f for f in open_pins["findings"] if "3V3" in f["message"])
+    pad = next(p for p in board.pads() if p.ref == "U1" and p.pad.number == "36")
+    assert finding["at"] == pytest.approx((pad.x, pad.y), abs=1e-3)
 
 
 def test_overlapping_parts_are_caught() -> None:

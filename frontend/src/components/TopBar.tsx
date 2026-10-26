@@ -1,10 +1,13 @@
-import { Download, Monitor, Moon, Redo2, Sun, Undo2 } from "lucide-react";
+import { Box, CircuitBoard, Download, Monitor, Moon, Redo2, Sun, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Health } from "../api";
 
 export type ThemeChoice = "system" | "light" | "dark";
+export type Mode = "part" | "board";
 
 interface Props {
+  mode: Mode;
+  onMode: (mode: Mode) => void;
   title: string;
   health: Health | null;
   backendDown: boolean;
@@ -52,6 +55,14 @@ export function TopBar(props: Props) {
       <div className="brand">
         <BrandMark />
         <span className="brand-name">Jig</span>
+        <div className="segmented mode-switch" role="radiogroup" aria-label="Workspace">
+          <button type="button" role="radio" aria-checked={props.mode === "part"} className={props.mode === "part" ? "is-active" : ""} onClick={() => props.onMode("part")}>
+            <Box size={14} /> Part
+          </button>
+          <button type="button" role="radio" aria-checked={props.mode === "board"} className={props.mode === "board" ? "is-active" : ""} onClick={() => props.onMode("board")}>
+            <CircuitBoard size={14} /> Board
+          </button>
+        </div>
         <span className="brand-divider" />
         <span className="part-title">{props.title}</span>
       </div>

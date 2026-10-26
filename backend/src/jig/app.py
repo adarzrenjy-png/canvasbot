@@ -31,6 +31,9 @@ from jig.cad.samples import SAMPLES
 from jig.fea.ccx import find_ccx
 from jig.fea.materials import MATERIALS
 from jig.fea.service import analyze_build
+from jig.pcb.samples import SAMPLES as BOARD_SAMPLES
+from jig.pcb.service import BoardService
+from jig.report.board_document import build_board_report
 from jig.report.document import build_report
 from jig.settings import Settings, get_settings
 
@@ -48,6 +51,7 @@ class Services:
         config = load_model_config()
         self.meter = CostMeter(config=config, budget_usd=settings.budget_usd)
         self.models = ModelClient(config, self.meter, key_lookup=Settings.api_key)
+        self.boards = BoardService(settings.data_dir / "boards")
 
 
 class CodeRequest(BaseModel):
@@ -222,6 +226,81 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if path is None:
             raise HTTPException(404, "That build has no such file (it may have been cleaned up)")
         return FileResponse(path, media_type=media_type, filename=f"jig_part.{kind}")
+
+    # ---------------------------------------------------------------- boards
+
+    async def _design(code: str) -> dict[str, Any]:
+        try:
+            return await run_in_threadpool(services().boards.design, code)
+        except ProgramError as error:
+            raise HTTPException(422, {"message": str(error), "line": error.line}) from error
+
+    @app.get("/api/boards/samples")
+    def board_samples() -> list[str]:
+        return sorted(BOARD_SAMPLES)
+
+    @app.get("/api/boards/samples/{name}")
+    async def board_sample(name: str) -> dict[str, Any]:
+        code = BOARD_SAMPLES.get(name)
+        if code is None:
+            raise HTTPException(404, f"No sample board named {name!r}")
+        return await _design(code)
+
+    @app.post("/api/boards/design")
+    async def design_board(request: CodeRequest) -> dict[str, Any]:
+        return await _design(request.code)
+
+    @app.post("/api/boards/params")
+    async def board_params(request: ParamsRequest) -> dict[str, Any]:
+        try:
+            code = set_params(request.code, request.updates)
+        except ProgramError as error:
+            raise HTTPException(422, {"message": str(error), "line": error.line}) from error
+        return await _design(code)
+
+    @app.post("/api/boards/lock")
+    async def board_lock(request: LockRequest) -> dict[str, Any]:
+        try:
+            code = set_param_flags(request.code, request.name, locked=request.locked)
+        except (ProgramError, KeyError) as error:
+            raise HTTPException(422, f"Cannot change lock: {error}") from error
+        return await _design(code)
+
+    @app.get("/api/boards/{board_id}/fab.zip")
+    def board_fab(board_id: str) -> FileResponse:
+        path = services().boards.path_for(board_id, "fab.zip")
+        if path is None:
+            raise HTTPException(404, "No such board (it may have been cleaned up)")
+        return FileResponse(path, media_type="application/zip", filename="jig_board_fab.zip")
+
+    @app.get("/api/boards/{board_id}/board.py")
+    def board_source(board_id: str) -> FileResponse:
+        path = services().boards.path_for(board_id, "board.py")
+        if path is None:
+            raise HTTPException(404, "No such board")
+        return FileResponse(path, media_type="text/x-python", filename="jig_board.py")
+
+    @app.get("/api/boards/{board_id}/report", response_class=HTMLResponse)
+    def board_report(board_id: str, download: bool = False) -> HTMLResponse:
+        payload = services().boards.load(board_id)
+        if payload is None:
+            raise HTTPException(404, "No such board")
+        headers = (
+            {"Content-Disposition": 'attachment; filename="jig_board_report.html"'}
+            if download
+            else {}
+        )
+        return HTMLResponse(build_board_report(payload), headers=headers)
+
+    @app.post("/api/boards/{board_id}/model3d")
+    async def board_model(board_id: str) -> dict[str, Any]:
+        """Build the board as a 3D part (blank, holes, part envelopes) for the viewport."""
+        payload = services().boards.load(board_id)
+        if payload is None:
+            raise HTTPException(404, "No such board")
+        code = payload["model3d_code"]
+        result = await run_in_threadpool(services().builder.build, code)
+        return _part_payload(code, result)
 
     @app.get("/api/session")
     def session() -> dict[str, Any]:

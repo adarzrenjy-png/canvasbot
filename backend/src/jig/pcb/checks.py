@@ -312,6 +312,9 @@ def run_erc(board: Board) -> list[CheckResult]:
                 for p in group:
                     net_of.setdefault((ref, p), net)
 
+    pad_at = {(pad.ref, pad.pad.number): (round(pad.x, 3), round(pad.y, 3)) for pad in board.pads()}
+    centre = {ref: (round(placed.x, 3), round(placed.y, 3)) for ref, placed in board.parts.items()}
+
     supply = CheckResult("supply", "Every power input has a supply", "erc", 0)
     ground = CheckResult("ground", "Ground pins are on a ground net", "erc", 0)
     drivers = CheckResult("drivers", "No two outputs drive the same net", "erc", len(board.nets))
@@ -328,11 +331,12 @@ def run_erc(board: Board) -> list[CheckResult]:
         for pin in placed.part.pins:
             net = net_of.get((ref, pin.number))
             label = f"{ref}.{pin.name}"
+            at = pad_at.get((ref, pin.number))
             if pin.type == "power_in":
                 supply.looked_at += 1
                 if net is None:
                     open_pins.findings.append(
-                        Finding("open_pins", "error", f"{label} (power input) is not connected")
+                        Finding("open_pins", "error", f"{label} (power input) is not connected", at)
                     )
                 elif net.voltage is None and not any(
                     board.parts[r].part.pin(p).type == "power_out" for r, p in net.pins
@@ -343,7 +347,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                             "error",
                             f"{label} is on {net.name}, which has no supply: no power "
                             "output pin and no declared voltage",
-                            None,
+                            at,
                             [net.name],
                         )
                     )
@@ -352,7 +356,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                 open_pins.looked_at += 1
                 if net is None:
                     open_pins.findings.append(
-                        Finding("open_pins", "error", f"{label} (ground) is not connected")
+                        Finding("open_pins", "error", f"{label} (ground) is not connected", at)
                     )
                 elif net.kind != "ground":
                     ground.findings.append(
@@ -360,7 +364,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                             "ground",
                             "error",
                             f"{label} is a ground pin on {net.name}, which is not ground",
-                            None,
+                            at,
                             [net.name],
                         )
                     )
@@ -368,7 +372,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                 open_pins.looked_at += 1
                 if net is None and not any(pin.number in g for g in placed.part.joined):
                     open_pins.findings.append(
-                        Finding("open_pins", "warning", f"{label} (power output) is unused")
+                        Finding("open_pins", "warning", f"{label} (power output) is unused", at)
                     )
             if pin.type in ("output", "power_out") and net is not None:
                 outputs[net.name].append(label)
@@ -377,7 +381,11 @@ def run_erc(board: Board) -> list[CheckResult]:
                 if net is not None:
                     nc.findings.append(
                         Finding(
-                            "nc", "error", f"{label} must not be connected (it is on {net.name})"
+                            "nc",
+                            "error",
+                            f"{label} must not be connected (it is on {net.name})",
+                            at,
+                            [net.name],
                         )
                     )
             if net is not None:
@@ -394,6 +402,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                         "voltage",
                         "error",
                         f"{ref} ({placed.part.name}) sees {worst:g} V but is rated {rated_v:g} V",
+                        centre[ref],
                     )
                 )
             elif (
@@ -407,6 +416,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                         "warning",
                         f"{ref} runs at {worst:g} V, over half its {rated_v:g} V rating; "
                         "ceramic capacitors lose capacitance there",
+                        centre[ref],
                     )
                 )
         rated_a = placed.rating("current_a")
@@ -418,6 +428,7 @@ def run_erc(board: Board) -> list[CheckResult]:
                         "part_current",
                         "error",
                         f"{ref} carries {placed.current:g} A but is rated {rated_a:g} A",
+                        centre[ref],
                     )
                 )
 

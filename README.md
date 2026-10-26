@@ -17,6 +17,8 @@ checks and finite element analysis. Every dimension stays an editable parameter.
 
 ![Block mode: every feature as a labelled block with a picture of what it adds, its parameters, and a switch](docs/screenshot-blocks.png)
 
+![Board mode: a routed two-layer Pico servo board passing every design and electrical rule check, with the 5 V net highlighted](docs/screenshot-board.png)
+
 ## Status
 
 | Milestone | Target | State |
@@ -54,6 +56,19 @@ What works today:
   must survive with a diagram, the stress heatmap, mesh convergence and equilibrium evidence, the
   method with its equations in plain words, parameters, assumptions with their basis, an explicit
   "Not checked" list, and the exact source code. One self-contained HTML file that prints to PDF.
+- **Board mode: real circuit boards.** A board is a program too: parameters, parts from a
+  built-in library (IPC-7351 footprints, pin types, voltage and current ratings, LCSC numbers),
+  and nets with their voltage and current. Jig places the parts you specify, routes two layers
+  with a grid router (power tracks first, each sized by IPC-2221 for the current it carries),
+  pours ground on the bottom, then checks the result with rules that do not trust the router:
+  DRC (clearance, edge, width, current capacity, drills, overlap, connectivity) and ERC (supplies,
+  grounds, competing outputs, open power pins, no-connects, voltage and current ratings). Click a
+  finding to see it on the board, click a net to light it up, toggle layers, see the schematic,
+  or build the board in 3D for enclosure fits.
+- **Fab files a board house accepts:** Gerber RS-274X copper, mask, paste, silkscreen and outline,
+  Excellon drills, and JLCPCB BOM and pick-and-place files in one zip. A test reads every Gerber
+  back with an independent parser and matches it against the board. A board report documents the
+  design, the checks and the bill of materials.
 
 ## How it works
 
