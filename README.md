@@ -127,7 +127,7 @@ optionally **CalculiX** for FEA. Then one launcher does the rest on every OS.
 
 ```sh
 brew install python@3.12 node        # if you don't have them
-brew install calculix-ccx            # optional, turns on FEA
+brew install costerwi/calculix/calculix-ccx   # optional, turns on FEA (community tap, builds ccx)
 git clone <this repo> jig && cd jig
 python3 scripts/jig.py setup         # makes .venv, installs everything, creates .env
 # put your MODEL_API_KEY in .env
@@ -144,9 +144,9 @@ py scripts\jig.py setup
 py scripts\jig.py start
 ```
 
-For FEA on Windows, download the official prebuilt CalculiX for Windows (from calculix.de or the
-bConverged package), unzip it, and either add the folder containing `ccx.exe` to `PATH` or set
-`JIG_CCX` in `.env` to the full path of `ccx.exe`.
+For FEA on Windows, get a prebuilt `ccx.exe` (PrePoMax bundles one; calculix.de links Windows
+builds), then either add its folder to `PATH` or set `JIG_CCX` in `.env` to the full path of
+`ccx.exe`. Jig finds `ccx`, and versioned names like `ccx_2.23`, on its own.
 
 ### Linux
 

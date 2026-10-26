@@ -9,8 +9,12 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
-CANDIDATE_NAMES = ("ccx", "ccx_2.23", "ccx_2.22", "ccx_2.21", "ccx_2.20", "ccx_static", "ccx_MT")
+# `ccx`, or a versioned build such as `ccx_2.23` (Homebrew) or `ccx_2.21_MT.exe`.
+CCX_NAME = re.compile(r"^ccx(?:_(\d+(?:\.\d+)*))?(?:_[A-Za-z]+)?(?:\.exe)?$", re.IGNORECASE)
+# Apps started from the Dock or Start menu may not inherit the shell's PATH.
+EXTRA_DIRS = ("/opt/homebrew/bin", "/usr/local/bin")
 
 
 @dataclass(frozen=True)
@@ -33,11 +37,15 @@ class CcxStatus:
 def install_hint() -> str:
     system = platform.system()
     if system == "Darwin":
-        return "Install with Homebrew: brew install calculix-ccx (then restart Jig)."
+        return (
+            "Install with Homebrew: brew install costerwi/calculix/calculix-ccx "
+            "(a community tap that builds CalculiX in a few minutes), then restart Jig."
+        )
     if system == "Windows":
         return (
-            "Download the official CalculiX Windows build (bConverged/calculix.de), unzip it, "
-            "and add the folder containing ccx.exe to PATH, or set JIG_CCX to its full path."
+            "Get a Windows build of ccx.exe (for example the one bundled with PrePoMax, or the "
+            "Windows links on calculix.de), then add its folder to PATH or set JIG_CCX in .env "
+            "to the full path of ccx.exe."
         )
     return "Install with your package manager, e.g. sudo apt install calculix-ccx."
 
@@ -53,13 +61,43 @@ def _version(path: str) -> str | None:
     return match.group(1) if match else "unknown"
 
 
+def _version_key(path: Path) -> tuple[int, ...]:
+    match = CCX_NAME.match(path.name)
+    if not match or not match.group(1):
+        return (999,)  # a plain `ccx` is what the user chose to put on PATH: prefer it
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def scan_for_ccx() -> list[str]:
+    """Every ccx executable on PATH (plus Homebrew's folders), newest version first."""
+    dirs = os.environ.get("PATH", "").split(os.pathsep) + list(EXTRA_DIRS)
+    seen: set[Path] = set()
+    found: list[Path] = []
+    for raw in dirs:
+        directory = Path(raw) if raw else None
+        if directory is None or not directory.is_dir():
+            continue
+        try:
+            entries = list(directory.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if CCX_NAME.match(entry.name) and entry.is_file() and os.access(entry, os.X_OK):
+                resolved = entry.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    found.append(entry)
+    found.sort(key=_version_key, reverse=True)
+    return [str(p) for p in found]
+
+
 @lru_cache(maxsize=1)
 def find_ccx(override: str | None = None) -> CcxStatus:
     override = override or os.environ.get("JIG_CCX")
     candidates = [override] if override else []
-    candidates += [found for name in CANDIDATE_NAMES if (found := shutil.which(name))]
+    candidates += scan_for_ccx()
     for path in candidates:
-        if path and shutil.which(path):
+        if path and (shutil.which(path) or Path(path).is_file()):
             version = _version(path)
             if version is not None:
                 return CcxStatus(True, path, version, f"CalculiX {version} found")

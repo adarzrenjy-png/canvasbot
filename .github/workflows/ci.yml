@@ -46,8 +46,8 @@ jobs:
 
       - name: Install CalculiX (macOS)
         if: runner.os == 'macOS'
-        continue-on-error: true  # FEA tests skip if the formula is unavailable
-        run: brew install calculix-ccx
+        continue-on-error: true  # FEA tests skip if the tap fails to build
+        run: brew install costerwi/calculix/calculix-ccx
 
       - name: Install the backend
         run: python -m pip install -e "./backend[dev]"
