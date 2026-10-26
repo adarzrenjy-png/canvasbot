@@ -13,7 +13,7 @@ checks and finite element analysis. Every dimension stays an editable parameter.
 > October 26 to November 4, 2026. Everything in this repository was written from scratch during
 > the hackathon. No code or assets come from earlier projects.
 
-<!-- Screenshot goes here once the agent loop lands. -->
+![Jig showing an L-bracket with its feature tree, parameters, and the code for the selected feature](docs/screenshot.png)
 
 ## Status
 
