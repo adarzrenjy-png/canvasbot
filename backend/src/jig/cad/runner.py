@@ -138,6 +138,49 @@ def tessellate(part: bd.Shape, owners: list[str | None], tol: float, ang: float)
     }
 
 
+def face_info(faces: list[bd.Face], owners: list[str | None]) -> list[dict]:
+    """What FEA face selectors match on: type, size, position, normal, owning feature."""
+    info = []
+    for index, (face, owner) in enumerate(zip(faces, owners, strict=True)):
+        center = face.center(bd.CenterOf.MASS)  # gmsh matches on the same centroid
+        box = face.bounding_box()
+        entry = {
+            "index": index,
+            "type": str(face.geom_type).split(".")[-1].lower(),
+            "area": face.area,
+            "center": [center.X, center.Y, center.Z],
+            "bbox": [[box.min.X, box.min.Y, box.min.Z], [box.max.X, box.max.Y, box.max.Z]],
+            "feature": owner,
+            "normal": None,
+        }
+        if face.geom_type == bd.GeomType.PLANE:
+            n = face.normal_at(center)
+            entry["normal"] = [n.X, n.Y, n.Z]
+        info.append(entry)
+    return info
+
+
+def step_meshes(
+    snapshots: list[tuple[str, Any]], history: list[tuple[str, set[tuple]]], diagonal: float
+) -> list[dict]:
+    """A light mesh of the part after each feature, with that feature's new faces marked."""
+    tol = max(0.05, diagonal / 400)
+    out = []
+    previous: set[tuple] = set()
+    for (name, shape), (_, sigs) in zip(snapshots, history, strict=True):
+        faces = shape.faces()
+        if len(faces) > 400:  # keep the payload small on big parts
+            out.append({"id": name, "mesh": None})
+            previous = sigs
+            continue
+        owners = [name if _signature(f) not in previous else None for f in faces]
+        mesh = tessellate(shape, owners, tol, 0.5)
+        mesh.pop("edges")
+        out.append({"id": name, "mesh": mesh})
+        previous = sigs
+    return out
+
+
 def _owners(final_sigs: list[tuple], history: list[tuple[str, set[tuple]]]) -> list[str | None]:
     """Credit each final face to the feature that created it in its final form."""
     owners: list[str | None] = []
@@ -169,6 +212,7 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
     namespace: dict[str, Any] = {"__builtins__": _safe_builtins(), "__name__": "jig_part"}
     log = io.StringIO()
     history: list[tuple[str, set[tuple]]] = []
+    snapshots: list[tuple[str, Any]] = []
     part: Any = None
     with contextlib.redirect_stdout(log):
         try:
@@ -189,8 +233,12 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
                 "line": None,
                 "feature": None,
             }
+        suppressed = namespace.get("SUPPRESSED") or []
         for func in features if "error" not in result else []:
             name = getattr(func, "__name__", "feature")
+            if func in suppressed:
+                result["features"].append({"id": name, "ok": True, "ms": 0, "skipped": True})
+                continue
             started = time.perf_counter()
             try:
                 part = func(part)
@@ -208,6 +256,7 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
                 result["features"].append({"id": name, "ok": False, "ms": _ms(started)})
                 break
             history.append((name, {_signature(f) for f in part.faces()}))
+            snapshots.append((name, part))
             result["features"].append({"id": name, "ok": True, "ms": _ms(started)})
     result["log"] = log.getvalue()[-MAX_LOG_CHARS:]
     if "error" in result:
@@ -234,7 +283,10 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
             },
         },
         mesh=tessellate(part, owners, tol, ang),
+        face_info=face_info(faces, owners),
     )
+    if job.get("steps", True):
+        result["steps"] = step_meshes(snapshots, history, box.diagonal)
     exports = {}
     if "step" in job.get("exports", ["step", "stl"]):
         bd.export_step(part, out_dir / "part.step")

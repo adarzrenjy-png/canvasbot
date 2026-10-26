@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -21,6 +22,8 @@ from jig.cad.builder import Builder, BuildResult
 from jig.cad.program import ProgramError, parse_program, set_param_flags, set_params
 from jig.cad.samples import SAMPLES
 from jig.fea.ccx import find_ccx
+from jig.fea.service import analyze_build
+from jig.report.document import build_report
 from jig.settings import Settings, get_settings
 
 DOWNLOADS = {
@@ -45,6 +48,10 @@ class CodeRequest(BaseModel):
 
 class ParamsRequest(CodeRequest):
     updates: dict[str, float]
+
+
+class AnalyzeRequest(CodeRequest):
+    build_id: str | None = None
 
 
 class LockRequest(CodeRequest):
@@ -138,6 +145,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(422, f"Cannot change lock: {error}") from error
         program, program_error = _program_payload(code)
         return {"code": code, "program": program, "program_error": program_error}
+
+    @app.post("/api/parts/analyze")
+    async def analyze(request: AnalyzeRequest) -> dict[str, Any]:
+        """Run the part's load case (FEA) on a build of exactly this code."""
+        s = services()
+        try:
+            program = parse_program(request.code)
+        except ProgramError as error:
+            raise HTTPException(422, str(error)) from error
+        build = s.builder.load(request.build_id) if request.build_id else None
+        if build is None or (build.out_dir / "part.py").read_text(encoding="utf-8") != request.code:
+            build = await run_in_threadpool(s.builder.build, request.code)
+        ccx = find_ccx(settings.ccx_path)
+        fea = await run_in_threadpool(analyze_build, build, program, ccx)
+        return {**_part_payload(request.code, build), "fea": fea}
+
+    @app.get("/api/builds/{build_id}/report", response_class=HTMLResponse)
+    def report(build_id: str, download: bool = False) -> HTMLResponse:
+        build = services().builder.load(build_id)
+        if build is None or not build.ok:
+            raise HTTPException(404, "No finished build with that id (it may have been cleaned up)")
+        code = (build.out_dir / "part.py").read_text(encoding="utf-8")
+        fea_path = build.out_dir / "fea" / "fea.json"
+        fea = json.loads(fea_path.read_text(encoding="utf-8")) if fea_path.is_file() else None
+        html = build_report(code, parse_program(code), {"id": build_id, **build.data}, fea)
+        headers = (
+            {"Content-Disposition": 'attachment; filename="jig_report.html"'} if download else {}
+        )
+        return HTMLResponse(html, headers=headers)
 
     @app.get("/api/builds/{build_id}/download/{kind}")
     def download(build_id: str, kind: str) -> FileResponse:

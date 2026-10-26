@@ -21,7 +21,7 @@ checks and finite element analysis. Every dimension stays an editable parameter.
 |---|---|---|
 | Cross-platform skeleton, CI on macOS and Windows, a build123d part in the viewport, Meta API client | Oct 27 | **Done** |
 | Planner, Modeler, and Verifier loop from text; editable feature tree; Code tab (one-way) | Oct 28–29 | Next. The feature tree, parameter edits, and read-only code view already work. |
-| FEA Critic (CalculiX), stress heatmap, Fixer loop, two-way Code tab | Oct 30–31 | Planned |
+| FEA Critic (CalculiX), stress heatmap, Fixer loop, two-way Code tab | Oct 30–31 | FEA engine and engineering report done early; UI and Fixer next |
 | Optimize mode; photo input with SAM and sketch vision; voice input | Nov 1–2 | Planned |
 | Muse Spark Open verifier on Baseten, polish, onboarding, report export | Nov 3 | Planned |
 
@@ -38,6 +38,17 @@ What works today:
 - A Meta Model API client with retries, provider fallback, and a per-session cost meter that
   stops at a budget (default $20). Click **Test connection** to make one real call.
 - CalculiX detection. Without `ccx`, Jig runs with FEA switched off and tells you how to install it.
+- **Real FEA.** gmsh meshes the part in 10-node tetrahedra and CalculiX solves the load case written
+  in the part's own `ANALYSIS` block: material, fixtures (fixed or sliding supports) and forces,
+  with faces picked by the feature that made them. Every run is solved on two meshes and only
+  trusted if the peak stress settles (under 10 % change) and the reactions balance the loads. The
+  safety factor is computed by code from those numbers.
+- **The solver is checked against theory.** A test runs a cantilever beam through the whole
+  pipeline: tip deflection within 0.7 % and bending stress within 1 % of beam theory.
+- **An engineering report for every design** (`/api/builds/<id>/report`): verdict, the test the part
+  must survive with a diagram, the stress heatmap, mesh convergence and equilibrium evidence, the
+  method with its equations in plain words, parameters, assumptions with their basis, an explicit
+  "Not checked" list, and the exact source code. One self-contained HTML file that prints to PDF.
 
 ## How it works
 
@@ -137,6 +148,11 @@ For FEA on Windows, download the official prebuilt CalculiX for Windows (from ca
 bConverged package), unzip it, and either add the folder containing `ccx.exe` to `PATH` or set
 `JIG_CCX` in `.env` to the full path of `ccx.exe`.
 
+### Linux
+
+`sudo apt install calculix-ccx libglu1-mesa libxcursor1 libxft2 libxinerama1` (gmsh's wheel needs
+those graphics libraries even when it runs without a window), then the same launcher commands.
+
 ### Launcher commands
 
 | Command | What it does |
@@ -203,6 +219,8 @@ Jig depends on these open-source projects. None of their code is copied into thi
 | [Inter](https://rsms.me/inter/) via Fontsource | Typeface | OFL-1.1 (font), MIT (package) |
 | [Vite](https://vite.dev/), [TypeScript](https://www.typescriptlang.org/) | Build tooling | MIT, Apache-2.0 |
 | [pytest](https://pytest.org/), [Ruff](https://docs.astral.sh/ruff/) | Tests and lint (dev only) | MIT |
+| [gmsh](https://gmsh.info/) | Tetrahedral meshing for FEA (Python wheel, run in a separate process) | GPL-2.0-or-later |
+| [NumPy](https://numpy.org/) | FEA post-processing | BSD-3-Clause |
 | [CalculiX](http://www.calculix.de/) | FEA solver. Not bundled: installed separately and run as its own program | GPL-2.0 |
 
 ## Credits

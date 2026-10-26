@@ -36,7 +36,7 @@ class BuildResult:
 
 class Builder:
     def __init__(self, builds_dir: Path, *, timeout_s: float = 60.0, keep: int = 40) -> None:
-        self.builds_dir = builds_dir
+        self.builds_dir = builds_dir.resolve()  # the runner runs in another directory
         self.builds_dir.mkdir(parents=True, exist_ok=True)
         self.timeout_s = timeout_s
         self.keep = keep
@@ -106,6 +106,14 @@ class Builder:
         elapsed = int((time.monotonic() - started) * 1000)
         self._prune()
         return BuildResult(build_id=build_id, out_dir=out_dir, data=data, elapsed_ms=elapsed)
+
+    def load(self, build_id: str) -> BuildResult | None:
+        """A finished build by id, if it is still on disk."""
+        result = self.path_for(build_id, "result.json")
+        if result is None:
+            return None
+        data = json.loads(result.read_text(encoding="utf-8"))
+        return BuildResult(build_id=build_id, out_dir=result.parent, data=data, elapsed_ms=0)
 
     def path_for(self, build_id: str, filename: str) -> Path | None:
         if not build_id.isalnum():

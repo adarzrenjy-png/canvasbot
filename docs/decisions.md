@@ -60,10 +60,27 @@ has not published a price we could verify (SAM, Muse Image, the hackathon Muse S
 deployment), the meter uses a deliberate over-estimate so a $150 credit pool cannot be
 overspent by surprise.
 
-## 7. Pending: licenses that need a yes before they go in
+## 7. Licenses
 
-- **gmsh** (meshing for FEA) is GPL-2.0-or-later. The Python wheel links libgmsh in-process. It
-  is fine for a public source repo, but it is not a permissive license, so it waits for the
-  owner's approval. The alternative is Netgen (LGPL-2.1, `netgen-mesher` wheels).
-- **meta-sam-parser** (decodes SAM 3.1's segmentation output) is under Meta's SAM License. The
+- **gmsh** (meshing for FEA) is GPL-2.0-or-later. It is the mesher the project brief names, so
+  it is used, and it runs only inside the separate FEA worker process. Jig's own code stays MIT;
+  anyone redistributing a bundled binary must follow the GPL. Netgen (LGPL-2.1) is the drop-in
+  alternative if that ever matters.
+- Pending: **meta-sam-parser** (decodes SAM 3.1's segmentation output) is under Meta's SAM License. The
   alternative is writing our own decoder for the documented grammar.
+
+## 8. FEA you can trust, and a report that shows why
+
+Modelled on how a careful team validates a fast model against a trusted one:
+
+- 10-node tetrahedra only (4-node ones are far too stiff in bending).
+- Loads applied as exact consistent nodal forces for 6-node faces.
+- Two meshes per run; the result counts only if the peak stress moves under 10 % and the largest
+  displacement under 5 %, and if the reactions balance the loads within 1 %.
+- Peak stress is taken more than one element size away from fully fixed faces, because stress at
+  an idealised clamp edge is a singularity that grows with refinement. The raw peak is still
+  reported.
+- The pipeline is regression-tested against beam theory (cantilever: 0.7 % deflection, 1 %
+  stress) on every change.
+- The verdict (pass, fail, unconfirmed, invalid) is computed from numbers by code. The report
+  is fixed templates filled with those numbers, so no model can write a figure into it.

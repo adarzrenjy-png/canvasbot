@@ -14,7 +14,10 @@ A part is plain build123d Python, and that source is the single source of truth:
   holds `unit | description | flags`, every field optional. Flags: `min=`, `max=`,
   `locked`.
 * Features are the functions listed in `FEATURES`, applied in order. Each takes the
-  part so far and returns the new part. The docstring's first line is `kind | label`.
+  part so far and returns the new part. The docstring's first line is `kind | label`;
+  any further lines are a plain-English description of what the feature does.
+* `SUPPRESSED = [...]` (optional) lists features that stay in the tree but are skipped
+  when building, like suppressing a feature in a traditional CAD tool.
 
 Editing a parameter in the UI rewrites only that literal, so comments and layout
 survive; editing the code re-parses it into the tree. Both directions go through
@@ -74,12 +77,15 @@ class Feature:
     line_start: int
     line_end: int
     params: list[str] = field(default_factory=list)
+    description: str = ""
+    enabled: bool = True
 
 
 @dataclass
 class Program:
     params: list[Param]
     features: list[Feature]
+    analysis: dict | None = None
 
     def param(self, name: str) -> Param:
         for param in self.params:
@@ -91,7 +97,11 @@ class Program:
         return {
             "params": [asdict(p) for p in self.params],
             "features": [asdict(f) for f in self.features],
+            "analysis": self.analysis,
         }
+
+    def values(self) -> dict[str, float]:
+        return {p.name: p.value for p in self.params}
 
 
 def _number(node: ast.expr) -> float | int | None:
@@ -142,19 +152,30 @@ def parse_program(code: str) -> Program:
     params: list[Param] = []
     functions: dict[str, ast.FunctionDef] = {}
     feature_names: list[str] | None = None
+    suppressed: list[str] = []
+    analysis: dict | None = None
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
             target = node.targets[0]
             if not isinstance(target, ast.Name):
                 continue
-            if target.id == "FEATURES":
-                if not isinstance(node.value, ast.List | ast.Tuple):
-                    raise ProgramError("FEATURES must be a list of feature functions", node.lineno)
-                feature_names = []
-                for element in node.value.elts:
-                    if not isinstance(element, ast.Name):
-                        raise ProgramError("FEATURES may only list function names", node.lineno)
-                    feature_names.append(element.id)
+            if target.id == "ANALYSIS":
+                try:
+                    analysis = ast.literal_eval(node.value)
+                except ValueError as error:
+                    raise ProgramError(
+                        "ANALYSIS must be plain data: numbers, strings, lists and dicts",
+                        node.lineno,
+                    ) from error
+                if not isinstance(analysis, dict):
+                    raise ProgramError("ANALYSIS must be a dict", node.lineno)
+                continue
+            if target.id in LIST_NAMES:
+                names = _name_list(node, target.id)
+                if target.id == "FEATURES":
+                    feature_names = names
+                else:
+                    suppressed = names
                 continue
             value = _number(node.value)
             if value is None or not PARAM_NAME.match(target.id):
@@ -174,6 +195,11 @@ def parse_program(code: str) -> Program:
 
     if feature_names is None:
         raise ProgramError("The program must define FEATURES = [feature, ...]")
+    if len(set(feature_names)) != len(feature_names):
+        raise ProgramError("FEATURES lists the same feature more than once")
+    stray = [name for name in suppressed if name not in feature_names]
+    if stray:
+        raise ProgramError(f"SUPPRESSED names features not in FEATURES: {', '.join(stray)}")
 
     param_names = {p.name for p in params}
     features: list[Feature] = []
@@ -182,9 +208,11 @@ def parse_program(code: str) -> Program:
         if func is None:
             raise ProgramError(f"FEATURES lists {name!r} but no function by that name exists")
         kind, label = "other", name.replace("_", " ").capitalize()
+        description = ""
         doc = ast.get_docstring(func)
         if doc:
-            head = doc.strip().splitlines()[0]
+            head, *body = doc.strip().splitlines()
+            description = " ".join(line.strip() for line in body if line.strip())
             if "|" in head:
                 raw_kind, _, raw_label = head.partition("|")
                 kind = raw_kind.strip().lower() or kind
@@ -206,13 +234,80 @@ def parse_program(code: str) -> Program:
                 line_start=start,
                 line_end=func.end_lineno or func.lineno,
                 params=used,
+                description=description,
+                enabled=name not in suppressed,
             )
         )
         for param in params:
             if param.name in used:
                 param.used_by.append(name)
 
-    return Program(params=params, features=features)
+    return Program(params=params, features=features, analysis=analysis)
+
+
+LIST_NAMES = ("FEATURES", "SUPPRESSED")
+
+
+def _name_list(node: ast.Assign, name: str) -> list[str]:
+    if not isinstance(node.value, ast.List | ast.Tuple):
+        raise ProgramError(f"{name} must be a list of feature functions", node.lineno)
+    names = []
+    for element in node.value.elts:
+        if not isinstance(element, ast.Name):
+            raise ProgramError(f"{name} may only list function names", node.lineno)
+        names.append(element.id)
+    return names
+
+
+def _format_list(name: str, items: list[str], width: int = 100) -> str:
+    one_line = f"{name} = [{', '.join(items)}]"
+    if len(one_line) <= width:
+        return one_line
+    inner = "".join(f"    {item},\n" for item in items)
+    return f"{name} = [\n{inner}]"
+
+
+def _set_list(code: str, name: str, items: list[str]) -> str:
+    """Rewrite (or add, right after FEATURES) the top-level `name = [...]` statement."""
+    tree = ast.parse(code)
+    lines = code.splitlines(keepends=True)
+    text = _format_list(name, items)
+    anchor = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id == name:
+                end = node.end_lineno or node.lineno
+                newline = "\n" if lines[end - 1].endswith("\n") else ""
+                lines[node.lineno - 1 : end] = [text + newline]
+                return "".join(lines)
+            if isinstance(target, ast.Name) and target.id == "FEATURES":
+                anchor = node.end_lineno or node.lineno
+    if anchor is None:
+        raise ProgramError("The program must define FEATURES = [feature, ...]")
+    lines.insert(anchor, text + "\n")
+    return "".join(lines)
+
+
+def set_feature_order(code: str, order: list[str]) -> str:
+    """Reorder FEATURES. `order` must name exactly the features that are there now."""
+    program = parse_program(code)
+    current = [f.id for f in program.features]
+    if sorted(order) != sorted(current):
+        raise ProgramError("A new feature order must list every feature exactly once")
+    return _set_list(code, "FEATURES", order)
+
+
+def set_feature_enabled(code: str, feature_id: str, enabled: bool) -> str:
+    """Suppress a feature (skip it when building) or bring it back."""
+    program = parse_program(code)
+    ids = [f.id for f in program.features]
+    if feature_id not in ids:
+        raise ProgramError(f"No feature named {feature_id!r}")
+    off = [f.id for f in program.features if not f.enabled and f.id != feature_id]
+    if not enabled:
+        off.append(feature_id)
+    return _set_list(code, "SUPPRESSED", [i for i in ids if i in off])
 
 
 def format_number(value: float, is_int: bool) -> str:

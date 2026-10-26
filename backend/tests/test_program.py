@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from jig.cad.program import ProgramError, parse_program, set_param_flags, set_params
+from jig.cad.program import (
+    ProgramError,
+    parse_program,
+    set_feature_enabled,
+    set_feature_order,
+    set_param_flags,
+    set_params,
+)
 from jig.cad.samples import L_BRACKET
 
 
@@ -87,3 +94,38 @@ def test_missing_features_list_is_reported() -> None:
 def test_feature_without_function_is_reported() -> None:
     with pytest.raises(ProgramError, match="ghost"):
         parse_program("FEATURES = [ghost]\n")
+
+
+def test_feature_descriptions_come_from_the_docstring_body() -> None:
+    fillet = parse_program(L_BRACKET).features[2]
+    assert fillet.description.startswith("Rounds the inside corner")
+    assert "\n" not in fillet.description
+
+
+def test_suppressing_a_feature_round_trips() -> None:
+    off = set_feature_enabled(L_BRACKET, "inside_fillet", False)
+    assert "SUPPRESSED = [inside_fillet]" in off
+    assert [f.enabled for f in parse_program(off).features] == [True, True, False, True, True]
+    assert set_feature_enabled(off, "inside_fillet", True) == L_BRACKET
+
+
+def test_reordering_features_rewrites_only_the_list() -> None:
+    order = ["base_flange", "upright_flange", "base_holes", "upright_holes", "inside_fillet"]
+    moved = set_feature_order(L_BRACKET, order)
+    assert [f.id for f in parse_program(moved).features] == order
+    assert moved.count("\n") == L_BRACKET.count("\n")
+    with pytest.raises(ProgramError, match="every feature"):
+        set_feature_order(L_BRACKET, order[:-1])
+
+
+def test_suppressed_must_name_real_features() -> None:
+    with pytest.raises(ProgramError, match="SUPPRESSED"):
+        parse_program(L_BRACKET.replace("SUPPRESSED = []", "SUPPRESSED = [ghost]"))
+
+
+def test_analysis_block_is_parsed_as_plain_data() -> None:
+    analysis = parse_program(L_BRACKET).analysis
+    assert analysis["material"] == "petg"
+    assert analysis["loads"][0]["force"] == [0, 0, "-LOAD_N"]
+    with pytest.raises(ProgramError, match="plain data"):
+        parse_program(L_BRACKET.replace('"material": "petg"', '"material": PETG'))
