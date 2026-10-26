@@ -13,7 +13,9 @@ checks and finite element analysis. Every dimension stays an editable parameter.
 > October 26 to November 4, 2026. Everything in this repository was written from scratch during
 > the hackathon. No code or assets come from earlier projects.
 
-![Jig showing an L-bracket with its feature tree, parameters, and the code for the selected feature](docs/screenshot.png)
+![Jig running FEA on an L-bracket: FAIL at safety factor 1.7, with the stress heatmap and the evidence behind the verdict](docs/screenshot-fea.png)
+
+![Block mode: every feature as a labelled block with a picture of what it adds, its parameters, and a switch](docs/screenshot-blocks.png)
 
 ## Status
 
@@ -34,6 +36,9 @@ What works today:
   agents off it.
 - Click a feature or a face in the viewport and its faces light up, its parameters filter, and
   its code block highlights.
+- **Block mode** in the Code tab: every feature as a labelled block with a plain-English
+  description, a picture of the part after that step (what it adds in blue), its parameters to edit
+  in place, a switch to turn it off, and drag-to-reorder. The Python view shows the same program.
 - Undo and redo, STEP, STL, and standalone `.py` export, light and dark themes.
 - A Meta Model API client with retries, provider fallback, and a per-session cost meter that
   stops at a budget (default $20). Click **Test connection** to make one real call.

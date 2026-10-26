@@ -84,3 +84,25 @@ def test_analyze_then_report_with_results(client: TestClient) -> None:
     assert body["fea"]["status"] == "fail"
     report = client.get(f"/api/builds/{body['build']['id']}/report").text
     assert ">FAIL<" in report and "safety factor" in report.lower()
+
+
+def test_blocks_can_be_switched_off_and_reordered(client: TestClient) -> None:
+    sample = client.get("/api/samples/l_bracket").json()
+    off = client.post(
+        "/api/parts/features/enabled",
+        json={"code": sample["code"], "feature": "inside_fillet", "enabled": False},
+    ).json()
+    assert "SUPPRESSED = [inside_fillet]" in off["code"]
+    assert off["build"]["ok"] and off["build"]["stats"]["faces"] == 12
+
+    order = ["base_flange", "upright_flange", "base_holes", "upright_holes", "inside_fillet"]
+    moved = client.post(
+        "/api/parts/features/order", json={"code": sample["code"], "order": order}
+    ).json()
+    assert [f["id"] for f in moved["program"]["features"]] == order
+    assert moved["build"]["ok"]
+
+    bad = client.post(
+        "/api/parts/features/order", json={"code": sample["code"], "order": order[:2]}
+    )
+    assert bad.status_code == 422

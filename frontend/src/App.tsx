@@ -2,6 +2,7 @@ import { Activity, CircleCheck, Code2, Flame, Gauge, LoaderCircle, Maximize2, Me
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, type Build, type FeaResult, type Health, type PartPayload } from "./api";
 import { AgentPanel } from "./components/AgentPanel";
+import { BlocksView } from "./components/BlocksView";
 import { ChecksPanel, VERDICT } from "./components/ChecksPanel";
 import { CodeView } from "./components/CodeView";
 import { FeatureTree } from "./components/FeatureTree";
@@ -74,6 +75,7 @@ export default function App() {
   const [fea, setFea] = useState<{ result: FeaResult; buildId: string; code: string } | null>(null);
   const [feaRunning, setFeaRunning] = useState(false);
   const [showStress, setShowStress] = useState(false);
+  const [codeView, setCodeView] = useState<"blocks" | "text">("blocks");
   const traceId = useRef(0);
   const viewport = useRef<ViewportHandle>(null);
 
@@ -163,6 +165,17 @@ export default function App() {
       record: true,
       reason: `You set ${name} ${before ? `${before.value} → ` : ""}${value}${before?.unit ? ` ${before.unit}` : ""}`,
     });
+  };
+
+  const reorderFeatures = (order: string[]) => {
+    if (!part) return;
+    const moved = order.find((id, i) => features[i]?.id !== id);
+    run(() => api.setFeatureOrder(part.code, order), { record: true, reason: `You reordered the blocks${moved ? ` (moved ${moved})` : ""}` });
+  };
+
+  const toggleFeature = (id: string, enabled: boolean) => {
+    if (!part) return;
+    run(() => api.setFeatureEnabled(part.code, id, enabled), { record: true, reason: `You switched ${id} ${enabled ? "on" : "off"}` });
   };
 
   const toggleLock = async (name: string, locked: boolean) => {
@@ -459,7 +472,32 @@ export default function App() {
               <ChecksPanel program={program} health={health} fea={fea?.result ?? null} stale={feaStale} running={feaRunning} reportHref={reportHref} onRun={runFea} />
             )}
             {tab === "code" && part && (
-              <CodeView code={part.code} features={features} selectedFeature={selected} errorLine={failed?.line ?? null} onSelectFeature={setSelected} />
+              <div className="code-tab">
+                <div className="segmented" role="radiogroup" aria-label="Code view">
+                  <button type="button" role="radio" aria-checked={codeView === "blocks"} className={codeView === "blocks" ? "is-active" : ""} onClick={() => setCodeView("blocks")}>
+                    Blocks
+                  </button>
+                  <button type="button" role="radio" aria-checked={codeView === "text"} className={codeView === "text" ? "is-active" : ""} onClick={() => setCodeView("text")}>
+                    Python
+                  </button>
+                </div>
+                {codeView === "blocks" ? (
+                  <BlocksView
+                    features={features}
+                    params={params}
+                    build={part.build.ok ? part.build : shown ?? undefined}
+                    selected={selected}
+                    busy={busy}
+                    theme={theme}
+                    onSelect={setSelected}
+                    onReorder={reorderFeatures}
+                    onToggle={toggleFeature}
+                    onCommitParam={commitParam}
+                  />
+                ) : (
+                  <CodeView code={part.code} features={features} selectedFeature={selected} errorLine={failed?.line ?? null} onSelectFeature={setSelected} />
+                )}
+              </div>
             )}
             {tab === "trace" && <TracePanel events={trace} />}
           </div>

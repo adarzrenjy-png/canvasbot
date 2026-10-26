@@ -72,6 +72,7 @@ export interface Build {
   mesh?: MeshPayload;
   exports?: Record<string, string>;
   log?: string;
+  steps?: { id: string; mesh: MeshPayload | null }[];
 }
 
 export interface PartPayload {
@@ -205,6 +206,13 @@ export const api = {
     request<PartPayload>("/api/parts/params", {
       method: "POST",
       body: JSON.stringify({ code, updates }),
+    }),
+  setFeatureOrder: (code: string, order: string[]) =>
+    request<PartPayload>("/api/parts/features/order", { method: "POST", body: JSON.stringify({ code, order }) }),
+  setFeatureEnabled: (code: string, feature: string, enabled: boolean) =>
+    request<PartPayload>("/api/parts/features/enabled", {
+      method: "POST",
+      body: JSON.stringify({ code, feature, enabled }),
     }),
   setLock: (code: string, name: string, locked: boolean) =>
     request<Omit<PartPayload, "build">>("/api/parts/lock", {

@@ -19,7 +19,14 @@ from jig.ai.client import AIError, ModelClient
 from jig.ai.config import load_model_config
 from jig.ai.cost import CostMeter
 from jig.cad.builder import Builder, BuildResult
-from jig.cad.program import ProgramError, parse_program, set_param_flags, set_params
+from jig.cad.program import (
+    ProgramError,
+    parse_program,
+    set_feature_enabled,
+    set_feature_order,
+    set_param_flags,
+    set_params,
+)
 from jig.cad.samples import SAMPLES
 from jig.fea.ccx import find_ccx
 from jig.fea.materials import MATERIALS
@@ -53,6 +60,15 @@ class ParamsRequest(CodeRequest):
 
 class AnalyzeRequest(CodeRequest):
     build_id: str | None = None
+
+
+class OrderRequest(CodeRequest):
+    order: list[str]
+
+
+class EnableRequest(CodeRequest):
+    feature: str
+    enabled: bool
 
 
 class LockRequest(CodeRequest):
@@ -136,6 +152,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def update_params(request: ParamsRequest) -> dict[str, Any]:
         try:
             code = set_params(request.code, request.updates)
+        except ProgramError as error:
+            raise HTTPException(422, str(error)) from error
+        result = await run_in_threadpool(services().builder.build, code)
+        return _part_payload(code, result)
+
+    @app.post("/api/parts/features/order")
+    async def reorder(request: OrderRequest) -> dict[str, Any]:
+        try:
+            code = set_feature_order(request.code, request.order)
+        except ProgramError as error:
+            raise HTTPException(422, str(error)) from error
+        result = await run_in_threadpool(services().builder.build, code)
+        return _part_payload(code, result)
+
+    @app.post("/api/parts/features/enabled")
+    async def enable(request: EnableRequest) -> dict[str, Any]:
+        try:
+            code = set_feature_enabled(request.code, request.feature, request.enabled)
         except ProgramError as error:
             raise HTTPException(422, str(error)) from error
         result = await run_in_threadpool(services().builder.build, code)
