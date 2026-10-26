@@ -1,0 +1,7 @@
+# Lint and format settings for all Python in the repo (backend and scripts).
+line-length = 100
+target-version = "py311"
+src = ["backend/src", "backend"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]

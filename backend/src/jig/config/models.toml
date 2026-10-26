@@ -1,0 +1,98 @@
+# Every model ID Jig uses lives in this one file.
+#
+# Sources (checked 2026-10-26): the Meta Model API docs (dev.meta.ai/docs: overview,
+# quickstart, models, pricing-rate-limits, speech-to-text, sam) and Meta's official
+# cookbook, github.com/meta-models/meta-model-cookbook. Re-check against
+# dev.meta.ai/docs/models before the demo; IDs move between releases.
+
+[providers.meta]
+# OpenAI-compatible: POST /chat/completions, /responses, /images/generations,
+# /asr/transcribe (multipart), wss://api.meta.ai/v1/asr/realtime.
+base_url = "https://api.meta.ai/v1"
+api_key_env = "MODEL_API_KEY"
+
+[providers.baseten]
+# Baseten Model APIs, OpenAI Chat Completions format. Serves Muse Spark Open.
+base_url = "https://inference.baseten.co/v1"
+api_key_env = "BASETEN_API_KEY"
+
+# A role is one job in the app. Each names a provider and model; `fallback` is used
+# when the primary provider has no key configured or is unreachable.
+
+[roles.orchestrator]
+provider = "meta"
+model = "muse-spark-1.3"
+reasoning_effort = "low"
+
+[roles.planner]
+provider = "meta"
+model = "muse-spark-1.3"
+reasoning_effort = "medium"
+
+[roles.modeler]
+provider = "meta"
+model = "muse-spark-1.3"
+reasoning_effort = "high"
+
+[roles.fixer]
+provider = "meta"
+model = "muse-spark-1.3"
+reasoning_effort = "medium"
+
+[roles.optimizer]
+provider = "meta"
+model = "muse-spark-1.3"
+reasoning_effort = "medium"
+
+[roles.sketch_vision]
+# Reads a photo of a hand sketch into a spec. Images go in `user` messages only.
+provider = "meta"
+model = "muse-spark-1.3"
+reasoning_effort = "medium"
+
+[roles.verifier]
+# The one open-weights subagent. The hackathon-specific Baseten ID, not the one in
+# Baseten's public docs.
+provider = "baseten"
+model = "meta-models/muse-spark-open-1026"
+fallback_provider = "meta"
+fallback_model = "muse-spark-1.3"
+
+[roles.segmentation]
+# Responses API; output is SAM's segmentation token grammar.
+provider = "meta"
+model = "sam-3.1"
+
+[roles.transcribe]
+provider = "meta"
+model = "muse-voice-transcribe-1.0"
+
+[roles.concept_image]
+provider = "meta"
+model = "muse-image-1.0"
+
+# Estimated list prices in USD, used by the cost meter. The meter stays conservative:
+# where Meta has not published a number we could verify, the value is a deliberate
+# over-estimate and marked so.
+
+[pricing."muse-spark-1.3"]
+input_per_mtok = 1.25
+cached_input_per_mtok = 0.15
+output_per_mtok = 4.25
+
+[pricing."meta-models/muse-spark-open-1026"]
+# Unverified for the hackathon deployment: priced like Muse Spark to stay safe.
+input_per_mtok = 1.25
+cached_input_per_mtok = 0.15
+output_per_mtok = 4.25
+
+[pricing."muse-voice-transcribe-1.0"]
+per_audio_hour = 0.18
+
+[pricing."sam-3.1"]
+# Billed per image or video frame; rate unverified, over-estimated.
+per_image = 0.01
+
+[pricing."muse-image-1.0"]
+# Billed per image; rate unverified, over-estimated.
+per_image = 0.05

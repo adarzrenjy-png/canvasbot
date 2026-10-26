@@ -1,0 +1,25 @@
+# Secrets: API keys live in .env, which must never be committed.
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Build output
+build-output/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

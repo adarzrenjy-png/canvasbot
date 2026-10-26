@@ -1,0 +1,109 @@
+/* Jig design tokens. Our own values; see docs/design-notes.md for the rationale. */
+
+:root {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 150ms;
+  --dur-panel: 220ms;
+
+  color-scheme: light;
+  --accent: #0a66e8;
+  --accent-strong: #0753c2;
+  --accent-soft: #e6f0fe;
+  --on-accent: #ffffff;
+  --canvas: #f2f5f8;
+  --surface: #ffffff;
+  --surface-2: #ecf0f4;
+  --surface-3: #e2e8ee;
+  --line: #dfe5ec;
+  --text: #17222b;
+  --text-muted: #5b6b78;
+  --text-faint: #8796a3;
+  --success: #1f9d55;
+  --success-soft: #e3f5ea;
+  --warning: #c27a00;
+  --warning-soft: #fdf1dc;
+  --danger: #d93a3a;
+  --danger-soft: #fde7e7;
+  --ai: #7048e8;
+  --ai-soft: #efeafe;
+  --shadow-1: 0 1px 2px rgb(16 32 48 / 0.06), 0 1px 1px rgb(16 32 48 / 0.04);
+  --shadow-2: 0 4px 14px rgb(16 32 48 / 0.08), 0 1px 3px rgb(16 32 48 / 0.06);
+  --shadow-pop: 0 14px 40px rgb(16 32 48 / 0.16), 0 2px 6px rgb(16 32 48 / 0.08);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+
+  /* Viewport colors, read by the three.js scene. */
+  --vp-part: #c3cfdc;
+  --vp-edge: #3a4a5a;
+  --vp-grid: #d6dee6;
+  --vp-grid-major: #b9c5d1;
+  --vp-select: #0a66e8;
+  --vp-hover: #6aa4f5;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --accent: #3a8dff;
+  --accent-strong: #5fa3ff;
+  --accent-soft: #14284a;
+  --on-accent: #ffffff;
+  --canvas: #0a0f1a;
+  --surface: #121927;
+  --surface-2: #1a2334;
+  --surface-3: #222d42;
+  --line: #253047;
+  --text: #e8edf5;
+  --text-muted: #9aa8bc;
+  --text-faint: #6c7a8f;
+  --success: #3cc47c;
+  --success-soft: #11301f;
+  --warning: #f2b13b;
+  --warning-soft: #33270f;
+  --danger: #ff6b6b;
+  --danger-soft: #3a1717;
+  --ai: #9b7bff;
+  --ai-soft: #231a45;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-2: 0 6px 18px rgb(0 0 0 / 0.35);
+  --shadow-pop: 0 14px 40px rgb(0 0 0 / 0.45);
+
+  --vp-part: #8193ab;
+  --vp-edge: #0b111c;
+  --vp-grid: #182132;
+  --vp-grid-major: #243049;
+  --vp-select: #3a8dff;
+  --vp-hover: #7fb2ff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-panel: 0ms;
+  }
+}
