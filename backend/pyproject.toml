@@ -17,10 +17,11 @@ dependencies = [
   "python-multipart>=0.0.9",
   "gmsh>=4.13",  # GPL-2.0-or-later: the FEA mesher named in the project brief
   "numpy>=2",
+  "shapely>=2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "pygerber>=2.4"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jig"]

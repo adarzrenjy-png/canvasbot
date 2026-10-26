@@ -9,3 +9,4 @@ select = ["E", "F", "W", "I", "B", "UP"]
 [lint.per-file-ignores]
 # HTML and SVG templates read better unwrapped.
 "backend/src/jig/report/*.py" = ["E501"]
+"backend/src/jig/pcb/render.py" = ["E501"]

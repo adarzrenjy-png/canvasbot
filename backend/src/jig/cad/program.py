@@ -142,6 +142,38 @@ def _trailing_comment(line: str, end_col: int) -> str:
     return rest[hash_at + 1 :].strip() if hash_at >= 0 else ""
 
 
+def _param(node: ast.Assign, lines: list[str]) -> Param | None:
+    """A top-level `UPPER_NAME = number  # unit | description | flags` line, or None."""
+    target = node.targets[0]
+    value = _number(node.value)
+    if not isinstance(target, ast.Name) or value is None or not PARAM_NAME.match(target.id):
+        return None
+    info = _parse_comment(_trailing_comment(lines[node.lineno - 1], node.end_col_offset))
+    return Param(
+        name=target.id,
+        value=float(value),
+        is_int=isinstance(value, int),
+        line=node.lineno,
+        **info,  # type: ignore[arg-type]
+    )
+
+
+def parse_params(code: str) -> list[Param]:
+    """Just the parameters of any Jig program (a part or a board)."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as error:
+        raise ProgramError(f"Syntax error: {error.msg}", error.lineno) from error
+    lines = code.splitlines()
+    params = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            param = _param(node, lines)
+            if param is not None:
+                params.append(param)
+    return params
+
+
 def parse_program(code: str) -> Program:
     try:
         tree = ast.parse(code)
@@ -177,19 +209,9 @@ def parse_program(code: str) -> Program:
                 else:
                     suppressed = names
                 continue
-            value = _number(node.value)
-            if value is None or not PARAM_NAME.match(target.id):
-                continue
-            info = _parse_comment(_trailing_comment(lines[node.lineno - 1], node.end_col_offset))
-            params.append(
-                Param(
-                    name=target.id,
-                    value=float(value),
-                    is_int=isinstance(value, int),
-                    line=node.lineno,
-                    **info,  # type: ignore[arg-type]
-                )
-            )
+            param = _param(node, lines)
+            if param is not None:
+                params.append(param)
         elif isinstance(node, ast.FunctionDef):
             functions[node.name] = node
 
@@ -323,8 +345,7 @@ def set_params(code: str, updates: dict[str, float]) -> str:
         return code
     tree = ast.parse(code)
     lines = code.splitlines(keepends=True)
-    program = parse_program(code)
-    known = {p.name: p for p in program.params}
+    known = {p.name: p for p in parse_params(code)}
     unknown = sorted(set(updates) - set(known))
     if unknown:
         raise ProgramError(f"Unknown parameter(s): {', '.join(unknown)}")
@@ -363,8 +384,10 @@ def set_params(code: str, updates: dict[str, float]) -> str:
 
 def set_param_flags(code: str, name: str, *, locked: bool) -> str:
     """Add or remove the `locked` flag in a parameter's trailing comment."""
-    program = parse_program(code)
-    param = program.param(name)
+    matches = [p for p in parse_params(code) if p.name == name]
+    if not matches:
+        raise KeyError(name)
+    param = matches[0]
     lines = code.splitlines(keepends=True)
     line = lines[param.line - 1]
     newline = "\n" if line.endswith("\n") else ""
